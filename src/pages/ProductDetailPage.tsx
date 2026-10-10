@@ -167,6 +167,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
               {/* Product Main Image */}
               <img
+                width={1200}
+                height={900}
+                fetchPriority="high"
                 id="main-product-img"
                 alt={currentGalleryItem.alt}
                 src={currentGalleryItem.src}
@@ -211,6 +214,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   }`}
                 >
                   <img
+                    width={160}
+                    height={120}
+                    loading="lazy"
                     alt={item.label}
                     src={item.src}
                     className="w-full h-full object-contain"
@@ -527,9 +533,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 shield
               </span>
               <div className="space-y-1">
-                <h4 className="text-[13px] font-semibold text-[#0b1c30]">
+                <h2 className="text-[13px] font-semibold text-[#0b1c30]">
                   Rajshahi Hand-to-Hand Delivery
-                </h4>
+                </h2>
                 <p className="text-[13px] text-[#434655] leading-relaxed">
                   Examine the sealed box, verify the Apple serial number on checkcoverage.apple.com with our executive before making final payment.
                 </p>

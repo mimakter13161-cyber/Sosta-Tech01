@@ -16,6 +16,8 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <img
+                width={56}
+                height={56}
                 alt={`${settings.brandName} logo`}
                 className="h-7 w-auto object-contain"
                 src={settings.logoUrl}

@@ -151,6 +151,7 @@ export interface Product {
   inStock: boolean;
   preOrderOnly?: boolean;
   featured?: boolean;
+  showOnHomePage?: boolean;
   regionVariantBadge: string;
   regionCountryCode: string; // e.g. "USA LL/A", "HK ZA/A"
   colors: ColorOption[];

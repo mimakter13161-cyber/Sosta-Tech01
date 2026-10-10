@@ -54,7 +54,7 @@ export const HappyCustomersPage: React.FC<HappyCustomersPageProps> = ({ customer
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {filteredCustomers.map((customer) => (
               <article key={customer.id} className="overflow-hidden rounded-lg border border-[#e2e8f0] bg-white shadow-xs">
-                <img src={customer.image} alt={`${customer.customerName} with ${customer.phoneModel}`} loading="lazy" className="h-64 w-full bg-[#eff4ff] object-cover" />
+                <img width={640} height={480} src={customer.image} alt={`${customer.customerName} with ${customer.phoneModel}`} loading="lazy" className="h-64 w-full bg-[#eff4ff] object-cover" />
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div><h2 className="font-bold text-[#0b1c30]">{customer.customerName}</h2><p className="text-[12px] text-[#565e74] mt-0.5">{customer.phoneModel}</p></div>

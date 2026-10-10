@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { HappyCustomer, Product, Review } from '../types';
 import { STORE_MAP_IMAGE } from '../data/mockData';
 import { useSiteSettings } from '../components/SiteSettingsContext';
@@ -26,6 +26,12 @@ export const HomePage: React.FC<HomePageProps> = ({
 }) => {
   const settings = useSiteSettings();
   const [activeHeroBanner, setActiveHeroBanner] = useState(0);
+  const [showAllHomeProducts, setShowAllHomeProducts] = useState(false);
+  const homeProducts = useMemo(() => {
+    const selectedProducts = products.filter((product) => product.showOnHomePage ?? product.featured);
+    return selectedProducts.length ? selectedProducts : products.slice(0, 10);
+  }, [products]);
+  const visibleHomeProducts = showAllHomeProducts ? products : homeProducts.slice(0, 10);
   const latestHappyCustomers = [...happyCustomers]
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, 6);
@@ -124,6 +130,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-[#dbe1ff] filter blur-3xl opacity-30"></div>
                 <div className="absolute -bottom-20 -left-20 w-80 h-80 rounded-full bg-[#6ffbbe] filter blur-3xl opacity-30"></div>
                 <img
+                  width={1000}
+                  height={1000}
+                  fetchPriority="high"
                   className="relative z-10 w-full h-full object-contain drop-shadow-2xl transition-transform duration-500 group-hover:scale-105"
                   alt={`${settings.brandName} featured product banner`}
                   src={settings.heroBanners[activeHeroBanner] || ''}
@@ -165,13 +174,14 @@ export const HomePage: React.FC<HomePageProps> = ({
       {/* Regional Trust Assurance Strip */}
       <section className="w-full bg-[#eff4ff] py-8 shadow-xs border-y border-[#e2e8f0]">
         <div className="max-w-[1440px] mx-auto px-6 lg:px-12">
+          <h2 className="sr-only">Why shop at Sosta Tech</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="flex items-start gap-4 p-4 rounded-2xl bg-white shadow-xs">
               <div className="w-12 h-12 rounded-xl bg-[#dce9ff] flex items-center justify-center shrink-0 text-[#004ac6]">
                 <span className="material-symbols-outlined text-[26px]">pin</span>
               </div>
               <div className="space-y-1">
-                <h4 className="text-[13px] text-[#0b1c30] font-bold">100% Original &amp; IMEI Match</h4>
+                <h3 className="text-[13px] text-[#0b1c30] font-bold">100% Original &amp; IMEI Match</h3>
                 <p className="text-[13px] text-[#434655]">
                   Official &amp; authentic Global variants with verified packaging and BTRC checking.
                 </p>
@@ -183,7 +193,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <span className="material-symbols-outlined text-[26px]">verified_user</span>
               </div>
               <div className="space-y-1">
-                <h4 className="text-[13px] text-[#0b1c30] font-bold">7D Return &amp; 1Y Warranty</h4>
+                <h3 className="text-[13px] text-[#0b1c30] font-bold">7D Return &amp; 1Y Warranty</h3>
                 <p className="text-[13px] text-[#434655]">
                   Instant replacement for factory anomalies plus continuous direct repair support.
                 </p>
@@ -195,7 +205,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <span className="material-symbols-outlined text-[26px]">touch_app</span>
               </div>
               <div className="space-y-1">
-                <h4 className="text-[13px] text-[#0b1c30] font-bold">Hands-On In-Store Testing</h4>
+                <h3 className="text-[13px] text-[#0b1c30] font-bold">Hands-On In-Store Testing</h3>
                 <p className="text-[13px] text-[#434655]">
                   Test cameras, TrueTone, speakers, and ports thoroughly before paying 1 Taka.
                 </p>
@@ -207,7 +217,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <span className="material-symbols-outlined text-[26px]">battery_charging_full</span>
               </div>
               <div className="space-y-1">
-                <h4 className="text-[13px] text-[#0b1c30] font-bold">Verified Battery &amp; 3uTools</h4>
+                <h3 className="text-[13px] text-[#0b1c30] font-bold">Verified Battery &amp; 3uTools</h3>
                 <p className="text-[13px] text-[#434655]">
                   100% transparent diagnostics report with original serials for all pre-owned units.
                 </p>
@@ -334,9 +344,8 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
           </div>
 
-          {/* 4 Featured Products Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {products.slice(0, 4).map((phone) => (
+            {visibleHomeProducts.map((phone) => (
               <div
                 key={phone.id}
                 className="group flex flex-col rounded-2xl bg-white border border-[#e2e8f0] shadow-xs hover:shadow-xl transition-all duration-300 p-4"
@@ -359,6 +368,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                     {phone.storages[0]?.capacity}
                   </span>
                   <img
+                    width={600}
+                    height={600}
+                    loading="lazy"
                     className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
                     alt={phone.title}
                       src={phone.imageUrl || phone.gallery.find((image) => image.isPrimary)?.src || phone.gallery[0]?.src || ''}
@@ -446,6 +458,41 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+          {products.length > homeProducts.length && (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => setShowAllHomeProducts((showAll) => !showAll)}
+                aria-expanded={showAllHomeProducts}
+                className="rounded-xl bg-[#004ac6] px-6 py-3 text-[14px] font-semibold text-white transition-colors hover:bg-[#2563eb]"
+              >
+                {showAllHomeProducts ? 'Show Less' : 'See More Products'}
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="w-full bg-[#f8f9ff] py-16" aria-labelledby="store-faq-heading">
+        <div className="mx-auto max-w-[1100px] space-y-6 px-6 lg:px-12">
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#004ac6]">Rajshahi phone buying guide</span>
+            <h2 id="store-faq-heading" className="mt-1 text-[30px] font-bold tracking-tight text-[#0b1c30]">Frequently Asked Questions</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <article className="rounded-xl border border-[#e2e8f0] bg-white p-5">
+              <h3 className="font-bold text-[#0b1c30]">Where can I inspect a phone before buying in Rajshahi?</h3>
+              <p className="mt-2 text-[13px] leading-relaxed text-[#565e74]">Visit {settings.brandName} at {settings.footerLocation} to inspect available devices before purchase.</p>
+            </article>
+            <article className="rounded-xl border border-[#e2e8f0] bg-white p-5">
+              <h3 className="font-bold text-[#0b1c30]">Does Sosta Tech sell new and pre-owned phones?</h3>
+              <p className="mt-2 text-[13px] leading-relaxed text-[#565e74]">The catalog includes brand-new and pre-owned smartphones. Check each listing for its condition, stock status, price, and included warranty.</p>
+            </article>
+            <article className="rounded-xl border border-[#e2e8f0] bg-white p-5">
+              <h3 className="font-bold text-[#0b1c30]">How can I check stock or ask about delivery?</h3>
+              <p className="mt-2 text-[13px] leading-relaxed text-[#565e74]">Contact our Rajshahi showroom by phone or WhatsApp to confirm current stock, delivery options, and product details.</p>
+            </article>
           </div>
         </div>
       </section>
@@ -611,7 +658,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     {rev.avatarLetter}
                   </div>
                   <div>
-                    <h4 className="text-[13px] text-[#0b1c30] font-bold">{rev.name}</h4>
+                    <h3 className="text-[13px] text-[#0b1c30] font-bold">{rev.name}</h3>
                     <p className="text-[11px] text-[#434655]">{rev.title}</p>
                   </div>
                 </div>
@@ -721,7 +768,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {latestHappyCustomers.map((customer) => (
                 <article key={customer.id} className="overflow-hidden rounded-lg border border-[#e2e8f0] bg-white shadow-xs">
-                  <img src={customer.image} alt={`${customer.customerName} with ${customer.phoneModel}`} loading="lazy" className="w-full h-64 object-cover bg-[#eff4ff]" />
+                  <img width={640} height={480} src={customer.image} alt={`${customer.customerName} with ${customer.phoneModel}`} loading="lazy" className="w-full h-64 object-cover bg-[#eff4ff]" />
                   <div className="p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div><h3 className="text-[15px] font-bold text-[#0b1c30]">{customer.customerName}</h3><p className="text-[12px] text-[#565e74] mt-0.5">{customer.phoneModel}</p></div>

@@ -33,6 +33,8 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-3 text-left focus:outline-none group"
           >
             <img
+              width={64}
+              height={64}
               alt={`${brandName} logo`}
               className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
               src={logoUrl}

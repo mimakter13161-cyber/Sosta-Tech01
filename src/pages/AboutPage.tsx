@@ -12,7 +12,7 @@ export const AboutPage: React.FC = () => {
           <p className="text-[16px] leading-relaxed text-[#565e74]">{settings.heroDescription}</p>
           <p className="text-[14px] leading-relaxed text-[#434655]">Visit our Rajshahi storefront to inspect products in person, compare models, and get help selecting the right device.</p>
         </div>
-        <img src={settings.heroBanners[0] || settings.logoUrl} alt={`${settings.brandName} storefront`} className="w-full aspect-[4/3] rounded-xl border border-[#e2e8f0] bg-white object-cover" />
+        <img width={960} height={720} src={settings.heroBanners[0] || settings.logoUrl} alt={`${settings.brandName} storefront`} className="w-full aspect-[4/3] rounded-xl border border-[#e2e8f0] bg-white object-cover" />
       </section>
     </main>
   );

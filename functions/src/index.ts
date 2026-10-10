@@ -1,12 +1,61 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
 
 initializeApp();
 
 const auth = getAuth();
 const db = getFirestore();
+
+const siteOriginForRequest = (request: { get: (name: string) => string | undefined; hostname: string }) => {
+  const forwardedHost = request.get('x-forwarded-host')?.split(',')[0].trim();
+  const host = forwardedHost || request.get('host') || request.hostname;
+  if (!/^[a-z\d.-]+(?::\d{1,5})?$/i.test(host)) {
+    throw new Error('The request host is not a valid hostname.');
+  }
+  const protocol = host.startsWith('localhost') ? 'http' : 'https';
+  return `${protocol}://${host}`;
+};
+
+const escapeXml = (value: string) => value
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&apos;');
+
+export const robotsTxt = onRequest((request, response) => {
+  try {
+    const origin = siteOriginForRequest(request);
+    response
+      .set('Cache-Control', 'public, max-age=3600')
+      .type('text/plain')
+      .send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /compare\nSitemap: ${origin}/sitemap.xml\n`);
+  } catch (error) {
+    console.error('Could not generate robots.txt for this request.', error);
+    response.status(400).type('text/plain').send('Could not generate robots.txt for this host.');
+  }
+});
+
+export const sitemapXml = onRequest(async (request, response) => {
+  try {
+    const origin = siteOriginForRequest(request);
+    const fixedPaths = ['/', '/catalog', '/android', '/about', '/contact', '/happy-customers'];
+    const productSnapshot = await db.collection('products').get();
+    const productPaths = productSnapshot.docs.map((product) => `/product/${encodeURIComponent(product.id)}`);
+    const locations = [...fixedPaths, ...productPaths]
+      .map((route) => `  <url><loc>${escapeXml(`${origin}${route}`)}</loc></url>`)
+      .join('\n');
+    response
+      .set('Cache-Control', 'public, max-age=300')
+      .type('application/xml')
+      .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${locations}\n</urlset>\n`);
+  } catch (error) {
+    console.error('Could not generate sitemap.xml.', error);
+    response.status(500).type('text/plain').send('Could not generate the sitemap.');
+  }
+});
 
 const requireOwner = async (uid: string | undefined) => {
   if (!uid) throw new HttpsError('unauthenticated', 'Sign in to manage admin accounts.');

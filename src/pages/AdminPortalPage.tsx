@@ -279,10 +279,12 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
   const [editStatus, setEditStatus] = useState<string>('in_stock');
   const [editAuditorNote, setEditAuditorNote] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
+  const [editShowOnHomePage, setEditShowOnHomePage] = useState(false);
 
   // Add Phone Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newModel, setNewModel] = useState('');
+  const [newShowOnHomePage, setNewShowOnHomePage] = useState(false);
   const [newBrand, setNewBrand] = useState<string>('Apple');
   const [newSeries, setNewSeries] = useState<string>('iPhone 16 Series');
   const [newCondition, setNewCondition] = useState<Product['condition']>('Brand New');
@@ -602,6 +604,7 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
     setEditSaveError('');
     setEditStatus(!p.inStock || p.stock === 0 ? 'out_of_stock' : p.stock > 1 ? 'in_stock' : 'low_stock');
     setEditAuditorNote('');
+    setEditShowOnHomePage(p.showOnHomePage ?? p.featured ?? false);
   };
 
   const handleSaveEdit = () => {
@@ -659,6 +662,8 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
         costPrice: primaryVariant.costPrice ?? editCostPrice,
         stock,
         inStock: editStatus !== 'out_of_stock' && stock > 0,
+        showOnHomePage: editShowOnHomePage,
+        featured: editShowOnHomePage,
         variants,
         colors,
         storages,
@@ -742,6 +747,8 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
       stockLocation: newStockLocation.trim(),
       sku: enteredSku || `${brand.slice(0, 2).toUpperCase()}-${newModel.slice(0, 6).toUpperCase()}-${primaryVariant.storage}`,
       inStock: totalStock > 0,
+      showOnHomePage: newShowOnHomePage,
+      featured: newShowOnHomePage,
       regionVariantBadge: newRegionVariantBadge.trim(),
       regionCountryCode: newRegionCountryCode.trim(),
       colors: productColors,
@@ -769,6 +776,7 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
     setIsAddModalOpen(false);
     onToast(`Added ${newModel} to Rajshahi inventory vault!`);
     setNewModel('');
+    setNewShowOnHomePage(false);
     setNewModelIdentifier('');
     setNewSku('');
     setNewStockLocation('Theme Omar Plaza, Rajshahi');
@@ -1725,6 +1733,15 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
                 <label className="md:col-span-2 text-[12px] font-semibold text-[#0b1c30]">Product Description
                   <textarea rows={3} value={editDescription} onChange={(event) => setEditDescription(event.target.value)} className="mt-1 w-full p-3 rounded-lg bg-[#eff4ff] border border-[#e2e8f0] font-normal" />
                 </label>
+                <label className="md:col-span-2 flex items-center gap-3 rounded-lg border border-[#e2e8f0] bg-[#f8f9ff] p-3 text-[13px] font-semibold text-[#0b1c30]">
+                  <input
+                    type="checkbox"
+                    checked={editShowOnHomePage}
+                    onChange={(event) => setEditShowOnHomePage(event.target.checked)}
+                    className="h-4 w-4 accent-[#004ac6]"
+                  />
+                  Show on Home Page
+                </label>
                 <label className="text-[12px] font-semibold text-[#0b1c30]">Weight / Specifications Summary
                   <input value={editWeightSpecifications} onChange={(event) => setEditWeightSpecifications(event.target.value)} className="mt-1 w-full h-10 px-3 rounded-lg bg-[#eff4ff] border border-[#e2e8f0] font-normal" />
                 </label>
@@ -2009,6 +2026,15 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
                   onChange={setNewModel}
                 />
               </div>
+              <label className="flex items-center gap-3 rounded-lg border border-[#e2e8f0] bg-[#f8f9ff] p-3 font-semibold text-[#0b1c30]">
+                <input
+                  type="checkbox"
+                  checked={newShowOnHomePage}
+                  onChange={(event) => setNewShowOnHomePage(event.target.checked)}
+                  className="h-4 w-4 accent-[#004ac6]"
+                />
+                Show on Home Page
+              </label>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

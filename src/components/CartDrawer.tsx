@@ -109,12 +109,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   className="p-3.5 rounded-xl bg-[#eff4ff] border border-[#e2e8f0] flex gap-3.5 items-center justify-between"
                 >
                   <img
+                    width={56}
+                    height={56}
                     src={item.image}
                     alt={item.title}
                     className="w-14 h-14 object-contain rounded-lg bg-white p-1 shrink-0 border border-[#e2e8f0]"
                   />
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-[13px] font-bold text-[#0b1c30] truncate">{item.title}</h4>
+                    <h3 className="text-[13px] font-bold text-[#0b1c30] truncate">{item.title}</h3>
                     <p className="text-[11px] text-[#434655]">
                       {item.storage} • {item.color}
                     </p>

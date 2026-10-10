@@ -60,10 +60,10 @@ export const StoreLocationPage: React.FC = () => {
 
               {/* In-Store Testing Amenities */}
               <div className="p-6 rounded-2xl bg-[#e5eeff] space-y-3 border border-[#c3c6d7]/40">
-                <h3 className="text-[16px] font-bold text-[#0b1c30] flex items-center gap-2">
+                <h2 className="text-[16px] font-bold text-[#0b1c30] flex items-center gap-2">
                   <span className="material-symbols-outlined text-[#004ac6]">verified</span>
                   <span>Complimentary In-Store Customer Facilities</span>
-                </h3>
+                </h2>
                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px] text-[#434655]">
                   <li className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-[#006242] text-[18px]">check_circle</span>
@@ -135,7 +135,7 @@ export const StoreLocationPage: React.FC = () => {
                   local_parking
                 </span>
                 <div>
-                  <h4 className="text-[14px] font-bold text-[#0b1c30]">Underground Basement Parking</h4>
+                  <h2 className="text-[14px] font-bold text-[#0b1c30]">Underground Basement Parking</h2>
                   <p className="text-[12px] text-[#434655]">
                     Free 1-hour parking coupon included with any device inspection or purchase.
                   </p>

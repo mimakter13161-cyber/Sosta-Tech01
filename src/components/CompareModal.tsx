@@ -99,6 +99,8 @@ export const CompareModal: React.FC<CompareModalProps> = ({
                       className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-[#eff4ff]"
                     >
                       <img
+                        width={40}
+                        height={40}
                         src={device.imageUrl || device.gallery.find((image) => image.isPrimary)?.src || device.gallery[0]?.src || ''}
                         alt=""
                         className="h-10 w-10 shrink-0 rounded bg-[#f8f9ff] object-contain p-1"
@@ -144,13 +146,15 @@ export const CompareModal: React.FC<CompareModalProps> = ({
                       <span className="material-symbols-outlined text-[16px]">close</span>
                     </button>
                     <img
+                      width={80}
+                      height={80}
                       src={p.imageUrl || p.gallery.find((image) => image.isPrimary)?.src || p.gallery[0]?.src || ''}
                       alt={p.title}
                       className="w-20 h-20 object-contain p-1"
                     />
-                    <h4 className="font-bold text-[14px] text-[#0b1c30] mt-2 leading-tight">
+                    <h3 className="font-bold text-[14px] text-[#0b1c30] mt-2 leading-tight">
                       {p.model}
-                    </h4>
+                    </h3>
                     <span className="text-[11px] text-[#004ac6] font-semibold mt-0.5">
                       {p.condition}
                     </span>
@@ -174,9 +178,9 @@ export const CompareModal: React.FC<CompareModalProps> = ({
               <div className="space-y-4 pt-6 text-[13px]">
                 {/* Display */}
                 <div>
-                  <h5 className="font-bold text-[11px] uppercase tracking-wider text-[#004ac6] mb-2">
+                  <h3 className="font-bold text-[11px] uppercase tracking-wider text-[#004ac6] mb-2">
                     Display & Screen
-                  </h5>
+                  </h3>
                   <div
                     className="grid gap-4 py-2 border-b border-[#eff4ff]"
                     style={{ gridTemplateColumns: `160px repeat(${products.length}, minmax(0, 1fr))` }}
@@ -203,9 +207,9 @@ export const CompareModal: React.FC<CompareModalProps> = ({
 
                 {/* Performance */}
                 <div>
-                  <h5 className="font-bold text-[11px] uppercase tracking-wider text-[#004ac6] mb-2">
+                  <h3 className="font-bold text-[11px] uppercase tracking-wider text-[#004ac6] mb-2">
                     Performance & Silicon
-                  </h5>
+                  </h3>
                   <div
                     className="grid gap-4 py-2 border-b border-[#eff4ff]"
                     style={{ gridTemplateColumns: `160px repeat(${products.length}, minmax(0, 1fr))` }}
@@ -232,9 +236,9 @@ export const CompareModal: React.FC<CompareModalProps> = ({
 
                 {/* Camera */}
                 <div>
-                  <h5 className="font-bold text-[11px] uppercase tracking-wider text-[#004ac6] mb-2">
+                  <h3 className="font-bold text-[11px] uppercase tracking-wider text-[#004ac6] mb-2">
                     Camera System
-                  </h5>
+                  </h3>
                   <div
                     className="grid gap-4 py-2 border-b border-[#eff4ff]"
                     style={{ gridTemplateColumns: `160px repeat(${products.length}, minmax(0, 1fr))` }}
@@ -261,9 +265,9 @@ export const CompareModal: React.FC<CompareModalProps> = ({
 
                 {/* Battery & Stock */}
                 <div>
-                  <h5 className="font-bold text-[11px] uppercase tracking-wider text-[#004ac6] mb-2">
+                  <h3 className="font-bold text-[11px] uppercase tracking-wider text-[#004ac6] mb-2">
                     Battery & Local Availability
-                  </h5>
+                  </h3>
                   <div
                     className="grid gap-4 py-2 border-b border-[#eff4ff]"
                     style={{ gridTemplateColumns: `160px repeat(${products.length}, minmax(0, 1fr))` }}

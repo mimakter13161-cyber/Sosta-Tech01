@@ -1,15 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { DEFAULT_SITE_SETTINGS, INITIAL_PRODUCTS, INITIAL_LEADS, REVIEWS } from './data/mockData';
 import { Product, AdminUser, CartItem, HappyCustomer, ProductVariant, WhatsAppLead, SiteSettings, LiveEditMap } from './types';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
 import { CompareModal } from './components/CompareModal';
-import { HomePage } from './pages/HomePage';
-import { CatalogPage } from './pages/CatalogPage';
-import { ProductDetailPage } from './pages/ProductDetailPage';
-import { AdminPortalPage } from './pages/AdminPortalPage';
-import { StoreLocationPage } from './pages/StoreLocationPage';
 import {
   normalizeSiteSettings,
   isLocalDevelopment,
@@ -17,9 +12,6 @@ import {
   SiteSettingsContext,
   writeSiteSettingsStorage,
 } from './components/SiteSettingsContext';
-import { AdminLoginPage } from './pages/AdminLoginPage';
-import { HappyCustomersPage } from './pages/HappyCustomersPage';
-import { AboutPage } from './pages/AboutPage';
 import { createAdminUser, verifyAdminPassword } from './auth/adminAuth';
 import { LiveEditorOverlay } from './components/LiveEditorOverlay';
 import {
@@ -43,6 +35,15 @@ import {
   signOutAdmin,
   subscribeToFirebaseAuth,
 } from './firebaseClient';
+
+const HomePage = lazy(() => import('./pages/HomePage').then(({ HomePage: Page }) => ({ default: Page })));
+const CatalogPage = lazy(() => import('./pages/CatalogPage').then(({ CatalogPage: Page }) => ({ default: Page })));
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage').then(({ ProductDetailPage: Page }) => ({ default: Page })));
+const AdminPortalPage = lazy(() => import('./pages/AdminPortalPage').then(({ AdminPortalPage: Page }) => ({ default: Page })));
+const StoreLocationPage = lazy(() => import('./pages/StoreLocationPage').then(({ StoreLocationPage: Page }) => ({ default: Page })));
+const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage').then(({ AdminLoginPage: Page }) => ({ default: Page })));
+const HappyCustomersPage = lazy(() => import('./pages/HappyCustomersPage').then(({ HappyCustomersPage: Page }) => ({ default: Page })));
+const AboutPage = lazy(() => import('./pages/AboutPage').then(({ AboutPage: Page }) => ({ default: Page })));
 
 interface NavigationRequest {
   tab: string;
@@ -1090,8 +1091,140 @@ export default function App() {
   };
 
   // Active product for PDP
-  const currentProduct =
-    products.find((p) => p.id === selectedProductId) || products[0];
+  const currentProduct = products.find((product) => product.id === selectedProductId);
+
+  useEffect(() => {
+    const pageTitle = activeTab === 'pdp' && currentProduct
+      ? `${currentProduct.title} | Sosta Tech Rajshahi`
+      : ({
+          home: 'Sosta Tech Rajshahi | Flagship Phones & Accessories',
+          iphones: 'Shop Smartphones | Sosta Tech Rajshahi',
+          android: 'Android Flagships | Sosta Tech Rajshahi',
+          about: 'About Sosta Tech | Rajshahi',
+          'store-location': 'Store Location & Hours | Sosta Tech Rajshahi',
+          'happy-customers': 'Customer Stories | Sosta Tech Rajshahi',
+          compare: 'Compare Flagship Phones | Sosta Tech Rajshahi',
+          portal: 'Admin Portal | Sosta Tech',
+        }[activeTab] || 'Sosta Tech Rajshahi | Flagship Phones');
+    const pageDescription = activeTab === 'pdp' && currentProduct
+      ? `${currentProduct.title} available in Rajshahi from ${siteSettings.brandName}. ${currentProduct.description}`
+      : `${siteSettings.brandName} sells authentic smartphones and accessories in Rajshahi, Bangladesh. Visit our Theme Omar Plaza store for verified stock, fair prices, and hands-on inspection.`;
+    const pagePath = window.location.pathname === '/' ? '/' : window.location.pathname.replace(/\/+$/, '');
+    const canonicalUrl = `${window.location.origin}${pagePath}`;
+    const pageImage = activeTab === 'pdp' && currentProduct
+      ? currentProduct.imageUrl || currentProduct.gallery.find((image) => image.isPrimary)?.src || currentProduct.gallery[0]?.src
+      : siteSettings.heroBanners[0] || siteSettings.logoUrl;
+    const setMeta = (selector: string, attribute: string, key: string, content: string) => {
+      let element = document.head.querySelector<HTMLMetaElement>(selector);
+      if (!element) {
+        element = document.createElement('meta');
+        element.setAttribute(attribute, key);
+        document.head.appendChild(element);
+      }
+      element.content = content;
+    };
+    let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.rel = 'canonical';
+      document.head.appendChild(canonical);
+    }
+    canonical.href = canonicalUrl;
+    document.title = pageTitle;
+    setMeta('meta[name="description"]', 'name', 'description', pageDescription);
+    setMeta('meta[name="keywords"]', 'name', 'keywords', 'Sosta Tech Rajshahi, smartphones Rajshahi, iPhone Rajshahi, Android phones Bangladesh, Theme Omar Plaza, authentic phones');
+    setMeta('meta[name="robots"]', 'name', 'robots', activeTab === 'portal' ? 'noindex, nofollow' : 'index, follow');
+    setMeta('meta[property="og:title"]', 'property', 'og:title', pageTitle);
+    setMeta('meta[property="og:description"]', 'property', 'og:description', pageDescription);
+    setMeta('meta[property="og:type"]', 'property', 'og:type', activeTab === 'pdp' ? 'product' : 'website');
+    setMeta('meta[property="og:url"]', 'property', 'og:url', canonicalUrl);
+    setMeta('meta[property="og:site_name"]', 'property', 'og:site_name', siteSettings.brandName);
+    setMeta('meta[property="og:locale"]', 'property', 'og:locale', 'en_BD');
+    setMeta('meta[property="og:image"]', 'property', 'og:image', pageImage || '');
+    setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', pageTitle);
+    setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', pageDescription);
+    setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', pageImage || '');
+
+    const localBusiness = {
+      '@type': 'LocalBusiness',
+      '@id': `${window.location.origin}/#localbusiness`,
+      name: siteSettings.brandName,
+      url: `${window.location.origin}/`,
+      image: pageImage,
+      telephone: siteSettings.contactNumber,
+      priceRange: '৳৳',
+      address: {
+        '@type': 'PostalAddress',
+        streetAddress: siteSettings.footerLocation,
+        addressLocality: 'Rajshahi',
+        addressRegion: 'Rajshahi Division',
+        postalCode: '6000',
+        addressCountry: 'BD',
+      },
+      areaServed: { '@type': 'City', name: 'Rajshahi' },
+    };
+    const graph: Record<string, unknown>[] = [
+      { '@type': 'WebSite', '@id': `${window.location.origin}/#website`, name: siteSettings.brandName, url: `${window.location.origin}/`, inLanguage: 'en-BD' },
+      localBusiness,
+    ];
+    if (activeTab === 'pdp' && currentProduct) {
+      graph.push({
+        '@type': 'Product',
+        name: currentProduct.title,
+        description: currentProduct.detailedDescription || currentProduct.description,
+        sku: currentProduct.sku,
+        brand: { '@type': 'Brand', name: currentProduct.brand },
+        image: currentProduct.gallery.map((image) => image.src),
+        itemCondition: currentProduct.condition === 'Brand New'
+          ? 'https://schema.org/NewCondition'
+          : currentProduct.condition === 'Official Refurbished'
+            ? 'https://schema.org/RefurbishedCondition'
+            : 'https://schema.org/UsedCondition',
+        offers: {
+          '@type': 'Offer',
+          priceCurrency: 'BDT',
+          price: currentProduct.basePrice,
+          availability: currentProduct.inStock && currentProduct.stock > 0
+            ? 'https://schema.org/InStock'
+            : currentProduct.preOrderOnly
+              ? 'https://schema.org/PreOrder'
+              : 'https://schema.org/OutOfStock',
+          url: canonicalUrl,
+          seller: { '@id': `${window.location.origin}/#localbusiness` },
+        },
+      });
+    }
+    if (activeTab === 'home') {
+      graph.push({
+        '@type': 'FAQPage',
+        mainEntity: [
+          {
+            '@type': 'Question',
+            name: 'Where can I inspect a phone before buying in Rajshahi?',
+            acceptedAnswer: { '@type': 'Answer', text: `${siteSettings.brandName} welcomes customers to inspect available devices at ${siteSettings.footerLocation} before purchase.` },
+          },
+          {
+            '@type': 'Question',
+            name: 'Does Sosta Tech sell new and pre-owned phones?',
+            acceptedAnswer: { '@type': 'Answer', text: 'The catalog includes brand-new and pre-owned smartphones. Check each product listing for its condition, stock status, price, and included warranty.' },
+          },
+          {
+            '@type': 'Question',
+            name: 'How can I check current stock or ask about delivery?',
+            acceptedAnswer: { '@type': 'Answer', text: `Contact ${siteSettings.brandName} by phone or WhatsApp to confirm current stock, delivery options, and product details.` },
+          },
+        ],
+      });
+    }
+    let structuredData = document.head.querySelector<HTMLScriptElement>('script[data-sosta-structured-data]');
+    if (!structuredData) {
+      structuredData = document.createElement('script');
+      structuredData.type = 'application/ld+json';
+      structuredData.dataset.sostaStructuredData = 'true';
+      document.head.appendChild(structuredData);
+    }
+    structuredData.textContent = JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }).replace(/</g, '\\u003c');
+  }, [activeTab, currentProduct, siteSettings]);
 
   return (
     <SiteSettingsContext.Provider value={siteSettings}>
@@ -1129,6 +1262,7 @@ export default function App() {
 
       {/* Main Router Content */}
       <main className="flex-1 w-full">
+        <Suspense fallback={<div className="min-h-[60vh] animate-pulse bg-[#f8f9ff]" aria-busy="true" aria-label="Loading page" />}>
         {activeTab === 'home' && (
           <div className="pt-20">
             <HomePage
@@ -1180,6 +1314,8 @@ export default function App() {
             <CatalogPage
               products={products}
               brandFilter="all"
+              searchQuery={searchQuery}
+              onSearchChange={handleSearch}
               onSelectProduct={handleSelectProduct}
               onAddToCompare={handleAddToCompare}
               compareList={compareList}
@@ -1195,6 +1331,8 @@ export default function App() {
             <CatalogPage
               products={products}
               brandFilter="Samsung"
+              searchQuery={searchQuery}
+              onSearchChange={handleSearch}
               onSelectProduct={handleSelectProduct}
               onAddToCompare={handleAddToCompare}
               compareList={compareList}
@@ -1207,7 +1345,7 @@ export default function App() {
 
         {activeTab === 'pdp' && (
           <div className="pt-20">
-            <ProductDetailPage
+            {currentProduct ? <ProductDetailPage
               product={currentProduct}
               onNavigateHome={() => {
                 navigateHome();
@@ -1217,7 +1355,15 @@ export default function App() {
               }}
               onAddToCart={handleAddToCart}
               onToast={showToast}
-            />
+            /> : (
+              <section className="mx-auto max-w-2xl px-6 py-24 text-center">
+                <h1 className="text-3xl font-bold text-[#0b1c30]">Product not found</h1>
+                <p className="mt-3 text-[#565e74]">This product may have been removed or its link may be outdated.</p>
+                <button onClick={() => navigateToTab('iphones')} className="mt-6 rounded-lg bg-[#004ac6] px-5 py-3 font-semibold text-white">
+                  Browse the catalog
+                </button>
+              </section>
+            )}
           </div>
         )}
 
@@ -1272,6 +1418,7 @@ export default function App() {
             onSetupOwner={handleSetupOwner}
           />
         ))}
+        </Suspense>
       </main>
 
       {/* Cart Slide-Over Drawer */}

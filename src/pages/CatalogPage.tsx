@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Product } from '../types';
 import { useSiteSettings } from '../components/SiteSettingsContext';
 
 interface CatalogPageProps {
   products: Product[];
   brandFilter?: 'Apple' | 'Samsung' | 'all';
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
   onSelectProduct: (productId: string) => void;
   onAddToCompare: (product: Product) => void;
   compareList: Product[];
@@ -14,29 +16,51 @@ interface CatalogPageProps {
 export const CatalogPage: React.FC<CatalogPageProps> = ({
   products,
   brandFilter = 'all',
+  searchQuery = '',
+  onSearchChange,
   onSelectProduct,
   onAddToCompare,
   compareList,
   onNavigateStore,
 }) => {
   const settings = useSiteSettings();
+  const maxAvailablePrice = Math.max(240000, ...products.map((product) => product.basePrice));
   // Filters state
-  const [inStockOnly, setInStockOnly] = useState(true);
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [preOrder, setPreOrder] = useState(false);
-  const [maxPrice, setMaxPrice] = useState(185000);
-  const [selectedConditions, setSelectedConditions] = useState<string[]>([
-    'Brand New',
-    'Pre-Owned (Like New 99%)',
-  ]);
-  const [selectedSeries, setSelectedSeries] = useState<string[]>([
-    'iPhone 16 Series',
-    'iPhone 15 Series',
-  ]);
-  const [selectedStorage, setSelectedStorage] = useState<string>('256 GB');
-  const [selectedRegions, setSelectedRegions] = useState<string[]>(['USA']);
-  const [selectedBatteryTier, setSelectedBatteryTier] = useState<string[]>(['90% - 100%']);
+  const [minPrice, setMinPrice] = useState(0);
+  const [maxPrice, setMaxPrice] = useState(maxAvailablePrice);
+  const [selectedBrand, setSelectedBrand] = useState<string>(brandFilter);
+  const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
+  const [selectedSeries, setSelectedSeries] = useState<string[]>([]);
+  const [selectedStorage, setSelectedStorage] = useState<string>('');
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedBatteryTier, setSelectedBatteryTier] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('Latest Arrivals');
-  const [currentPage, setCurrentPage] = useState(1);
+  const facetProducts = brandFilter === 'all' ? products : products.filter((product) => product.brand === brandFilter);
+  const availableSeries = Array.from(new Set(facetProducts.map((product) => product.series).filter(Boolean)))
+    .sort((left, right) => left.localeCompare(right));
+  const availableBrands = Array.from(new Set(facetProducts.map((product) => product.brand).filter(Boolean)))
+    .sort((left, right) => left.localeCompare(right));
+  const availableConditions = Array.from(new Set(facetProducts.map((product) => product.condition)))
+    .sort((left, right) => left.localeCompare(right));
+  const availableStorage = Array.from(new Set(facetProducts.flatMap((product) => [
+    ...product.storages.map((storage) => storage.capacity),
+    ...(product.variants || []).map((variant) => variant.storage),
+  ]).map((storage) => storage.replace(/\s/g, ''))))
+    .sort((left, right) => parseInt(left, 10) - parseInt(right, 10));
+  const availableRegions = Array.from(new Set(facetProducts.map((product) => {
+    const region = product.regionCountryCode.toLocaleLowerCase();
+    if (region.includes('usa')) return 'USA';
+    if (region.includes('japan') || region.includes('j/a')) return 'Japan';
+    if (region.includes('hk') || region.includes('za/a')) return 'HK';
+    return 'Other';
+  }))).sort((left, right) => left.localeCompare(right));
+
+  useEffect(() => {
+    setMaxPrice((current) => Math.max(current, maxAvailablePrice));
+    setMinPrice((current) => Math.min(current, maxAvailablePrice));
+  }, [maxAvailablePrice]);
 
   // Toggle helpers
   const toggleCondition = (cond: string) => {
@@ -58,15 +82,18 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
   };
 
   const handleResetFilters = () => {
-    setInStockOnly(true);
+    setInStockOnly(false);
     setPreOrder(false);
-    setMaxPrice(220000);
-    setSelectedConditions(['Brand New', 'Pre-Owned (Like New 99%)']);
-    setSelectedSeries(['iPhone 16 Series', 'iPhone 15 Series', 'iPhone 14 Series']);
-    setSelectedStorage('256 GB');
-    setSelectedRegions(['USA']);
-    setSelectedBatteryTier(['90% - 100%']);
+    setMinPrice(0);
+    setMaxPrice(maxAvailablePrice);
+    setSelectedBrand(brandFilter);
+    setSelectedConditions([]);
+    setSelectedSeries([]);
+    setSelectedStorage('');
+    setSelectedRegions([]);
+    setSelectedBatteryTier([]);
     setSortBy('Latest Arrivals');
+    onSearchChange?.('');
   };
 
   // Filter computation
@@ -74,19 +101,51 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
     return products.filter((p) => {
       if (brandFilter === 'Apple' && p.brand !== 'Apple') return false;
       if (brandFilter === 'Samsung' && p.brand !== 'Samsung') return false;
+      if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
 
-      // Price filter
-      if (p.basePrice > maxPrice) return false;
+      const price = Number.isFinite(p.basePrice) ? p.basePrice : 0;
+      if (price < minPrice || price > maxPrice) return false;
+      if (inStockOnly && (!p.inStock || p.stock <= 0)) return false;
+      if (preOrder && !p.preOrderOnly) return false;
 
-      // Condition filter
-      if (selectedConditions.length > 0) {
-        const matchesCondition = selectedConditions.some((c) => p.condition.includes(c));
-        if (!matchesCondition) return false;
+      if (selectedConditions.length && !selectedConditions.includes(p.condition)) return false;
+      if (selectedSeries.length && !selectedSeries.includes(p.series)) return false;
+
+      if (selectedStorage) {
+        const normalizedStorage = selectedStorage.replace(/\s/g, '').toLocaleLowerCase();
+        const storageOptions = [
+          ...p.storages.map((storage) => storage.capacity),
+          ...(p.variants || []).map((variant) => variant.storage),
+        ];
+        if (!storageOptions.some((storage) => storage.replace(/\s/g, '').toLocaleLowerCase() === normalizedStorage)) return false;
       }
 
-      // Series filter
-      if (selectedSeries.length > 0) {
-        if (!selectedSeries.includes(p.series)) return false;
+      if (selectedRegions.length && !selectedRegions.some((region) => {
+        const regionText = `${p.regionCountryCode} ${p.regionVariantBadge} ${p.simVariants.map((variant) => variant.name).join(' ')}`.toLocaleLowerCase();
+        if (region === 'Other') return !['usa', 'japan', 'j/a', 'hk', 'za/a'].some((term) => regionText.includes(term));
+        return regionText.includes(region.toLocaleLowerCase());
+      })) return false;
+
+      if (selectedBatteryTier.length) {
+        const healthValues = [
+          p.batteryHealth ?? (p.condition === 'Brand New' ? 100 : undefined),
+          ...(p.variants || []).map((variant) => variant.batteryHealth),
+        ].filter((health): health is number => typeof health === 'number');
+        if (!healthValues.some((health) => selectedBatteryTier.some((tier) =>
+          tier === '90% - 100%' ? health >= 90 && health <= 100 : health >= 80 && health < 90
+        ))) return false;
+      }
+
+      const query = searchQuery.trim().toLocaleLowerCase();
+      if (query) {
+        const searchable = [
+          p.title, p.model, p.brand, p.series, p.description, p.detailedDescription,
+          p.sku, p.modelIdentifier, p.regionCountryCode, p.regionVariantBadge,
+          ...p.colors.map((color) => color.name),
+          ...p.storages.map((storage) => storage.capacity),
+          ...(p.variants || []).flatMap((variant) => [variant.ram, variant.storage, variant.color]),
+        ].filter(Boolean).join(' ').toLocaleLowerCase();
+        if (!searchable.includes(query)) return false;
       }
 
       return true;
@@ -96,7 +155,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
       if (sortBy === 'Battery Health: Highest') return (b.batteryHealth || 100) - (a.batteryHealth || 100);
       return 0; // Latest
     });
-  }, [products, brandFilter, maxPrice, selectedConditions, selectedSeries, sortBy]);
+  }, [products, brandFilter, searchQuery, selectedBrand, minPrice, maxPrice, inStockOnly, preOrder, selectedConditions, selectedSeries, selectedStorage, selectedRegions, selectedBatteryTier, sortBy]);
 
   return (
     <div className="flex flex-col w-full">
@@ -186,7 +245,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                   <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex items-center justify-between flex-1">
                     <span>In Stock at Rajshahi Store</span>
                     <span className="text-[11px] text-[#006242] bg-[#bdffdb]/40 px-2 py-0.5 rounded-full font-bold">
-                      18
+                      {products.filter((product) => product.inStock && product.stock > 0).length}
                     </span>
                   </span>
                 </label>
@@ -200,7 +259,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                   <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex items-center justify-between flex-1">
                     <span>Pre-Order (3-5 Days)</span>
                     <span className="text-[11px] text-[#434655] bg-[#eff4ff] px-2 py-0.5 rounded-full">
-                      6
+                      {products.filter((product) => product.preOrderOnly).length}
                     </span>
                   </span>
                 </label>
@@ -213,22 +272,46 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                     Price Budget (BDT)
                   </span>
                   <span className="text-[12px] text-[#004ac6] font-bold">
-                    ৳45,000 - ৳{maxPrice.toLocaleString('en-IN')}
+                    ৳{minPrice.toLocaleString('en-IN')} - ৳{maxPrice.toLocaleString('en-IN')}
                   </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-[11px] font-medium text-[#434655]">
+                    Minimum
+                    <input
+                      type="number"
+                      min="0"
+                      max={maxPrice}
+                      value={minPrice}
+                      onChange={(event) => setMinPrice(Math.min(maxPrice, Math.max(0, Number(event.target.value) || 0)))}
+                      className="mt-1 h-9 w-full rounded-lg border border-[#e2e8f0] bg-[#eff4ff] px-2 text-[13px] text-[#0b1c30]"
+                    />
+                  </label>
+                  <label className="text-[11px] font-medium text-[#434655]">
+                    Maximum
+                    <input
+                      type="number"
+                      min={minPrice}
+                      max={maxAvailablePrice}
+                      value={maxPrice}
+                      onChange={(event) => setMaxPrice(Math.max(minPrice, Math.min(maxAvailablePrice, Number(event.target.value) || 0)))}
+                      className="mt-1 h-9 w-full rounded-lg border border-[#e2e8f0] bg-[#eff4ff] px-2 text-[13px] text-[#0b1c30]"
+                    />
+                  </label>
                 </div>
                 <input
                   type="range"
-                  min="45000"
-                  max="240000"
-                  step="2500"
+                  min={minPrice}
+                  max={maxAvailablePrice}
+                  step="1000"
                   value={maxPrice}
-                  onChange={(e) => setMaxPrice(Number(e.target.value))}
+                  onChange={(e) => setMaxPrice(Math.max(minPrice, Number(e.target.value)))}
                   className="w-full accent-[#004ac6] cursor-pointer h-2 bg-[#dce9ff] rounded-lg appearance-none"
                 />
                 <div className="flex items-center justify-between text-[11px] text-[#434655] font-medium">
-                  <span>৳45K</span>
-                  <span>৳130K</span>
-                  <span>৳240K</span>
+                  <span>৳{minPrice.toLocaleString('en-IN')}</span>
+                  <span>৳{Math.round((minPrice + maxAvailablePrice) / 2).toLocaleString('en-IN')}</span>
+                  <span>৳{maxAvailablePrice.toLocaleString('en-IN')}</span>
                 </div>
               </div>
 
@@ -238,99 +321,53 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                   Condition
                 </span>
                 <div className="space-y-2">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={selectedConditions.includes('Brand New')}
-                      onChange={() => toggleCondition('Brand New')}
-                      className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
-                    />
-                    <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex items-center justify-between flex-1">
-                      <span>Brand New (Sealed Pack)</span>
-                      <span className="text-[#434655] text-[12px] font-mono">11</span>
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={selectedConditions.includes('Pre-Owned (Like New 99%)')}
-                      onChange={() => toggleCondition('Pre-Owned (Like New 99%)')}
-                      className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
-                    />
-                    <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex items-center justify-between flex-1">
-                      <span>Pre-Owned (Like New 99%)</span>
-                      <span className="text-[#434655] text-[12px] font-mono">7</span>
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group opacity-60">
-                    <input
-                      type="checkbox"
-                      checked={selectedConditions.includes('Official Refurbished')}
-                      onChange={() => toggleCondition('Official Refurbished')}
-                      className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
-                    />
-                    <span className="text-[13px] text-[#0b1c30] flex items-center justify-between flex-1">
-                      <span>Official Refurbished</span>
-                      <span className="text-[#434655] text-[12px] font-mono">0</span>
-                    </span>
-                  </label>
+                  {availableConditions.map((condition) => (
+                    <label key={condition} className="flex items-center gap-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={selectedConditions.includes(condition)}
+                        onChange={() => toggleCondition(condition)}
+                        className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
+                      />
+                      <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors">{condition}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
 
               {/* Series Filter */}
               <div className="space-y-3 pt-4 border-t border-[#eff4ff]">
                 <span className="text-[12px] text-[#0b1c30] uppercase tracking-wider font-bold">
-                  Flagship Series
+                  Brand &amp; Category
                 </span>
+                <select
+                  value={selectedBrand}
+                  onChange={(event) => {
+                    setSelectedBrand(event.target.value);
+                    setSelectedConditions([]);
+                    setSelectedSeries([]);
+                    setSelectedStorage('');
+                    setSelectedRegions([]);
+                    setSelectedBatteryTier([]);
+                  }}
+                  aria-label="Filter by brand"
+                  className="h-10 w-full rounded-lg border border-[#e2e8f0] bg-[#eff4ff] px-3 text-[13px] text-[#0b1c30]"
+                >
+                  {brandFilter === 'all' && <option value="all">All brands</option>}
+                  {availableBrands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
+                </select>
                 <div className="space-y-2">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={selectedSeries.includes('iPhone 16 Series')}
-                      onChange={() => toggleSeries('iPhone 16 Series')}
-                      className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
-                    />
-                    <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex justify-between flex-1">
-                      <span>iPhone 16 Series</span>
-                      <span className="text-[#434655] font-mono text-[12px]">6</span>
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={selectedSeries.includes('iPhone 15 Series')}
-                      onChange={() => toggleSeries('iPhone 15 Series')}
-                      className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
-                    />
-                    <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex justify-between flex-1">
-                      <span>iPhone 15 Series</span>
-                      <span className="text-[#434655] font-mono text-[12px]">5</span>
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={selectedSeries.includes('iPhone 14 Series')}
-                      onChange={() => toggleSeries('iPhone 14 Series')}
-                      className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
-                    />
-                    <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex justify-between flex-1">
-                      <span>iPhone 14 Series</span>
-                      <span className="text-[#434655] font-mono text-[12px]">4</span>
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={selectedSeries.includes('Samsung S Series')}
-                      onChange={() => toggleSeries('Samsung S Series')}
-                      className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
-                    />
-                    <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex justify-between flex-1">
-                      <span>Samsung Galaxy S Series</span>
-                      <span className="text-[#434655] font-mono text-[12px]">2</span>
-                    </span>
-                  </label>
+                  {availableSeries.map((series) => (
+                    <label key={series} className="flex items-center gap-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={selectedSeries.includes(series)}
+                        onChange={() => toggleSeries(series)}
+                        className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
+                      />
+                      <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors">{series}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
 
@@ -340,18 +377,46 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                   Storage Capacity
                 </span>
                 <div className="grid grid-cols-2 gap-2">
-                  {['128 GB', '256 GB', '512 GB', '1 TB'].map((cap) => (
-                    <button
-                      key={cap}
-                      onClick={() => setSelectedStorage(cap)}
+                  <button
+                    key="all-storage"
+                    onClick={() => setSelectedStorage('')}
+                    className={`px-3 py-2 rounded-lg text-[13px] font-semibold text-center transition-all cursor-pointer ${
+                      !selectedStorage ? 'bg-[#004ac6] text-white shadow-xs' : 'bg-[#eff4ff] text-[#0b1c30] hover:bg-[#e5eeff]'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {availableStorage.map((cap) => (
+                  <button
+                    key={cap}
+                    onClick={() => setSelectedStorage((current) =>
+                      current.replace(/\s/g, '').toLocaleLowerCase() === cap.toLocaleLowerCase() ? '' : cap
+                    )}
                       className={`px-3 py-2 rounded-lg text-[13px] font-semibold text-center transition-all cursor-pointer ${
-                        selectedStorage === cap
+                        selectedStorage.replace(/\s/g, '').toLocaleLowerCase() === cap.toLocaleLowerCase()
                           ? 'bg-[#004ac6] text-white shadow-xs'
                           : 'bg-[#eff4ff] text-[#0b1c30] hover:bg-[#e5eeff]'
                       }`}
                     >
-                      {cap}
+                      {cap.replace(/gb$/i, ' GB').replace(/tb$/i, ' TB')}
                     </button>
+                  ))}
+                </div>
+
+                <div className="space-y-3 pt-4 border-t border-[#eff4ff]">
+                  <span className="text-[12px] text-[#0b1c30] uppercase tracking-wider font-bold">Battery Health</span>
+                  {['90% - 100%', '80% - 89%'].map((tier) => (
+                    <label key={tier} className="flex items-center gap-3 cursor-pointer text-[13px] text-[#0b1c30]">
+                      <input
+                        type="checkbox"
+                        checked={selectedBatteryTier.includes(tier)}
+                        onChange={() => setSelectedBatteryTier((current) => current.includes(tier)
+                          ? current.filter((value) => value !== tier)
+                          : [...current, tier])}
+                        className="h-4 w-4 accent-[#004ac6]"
+                      />
+                      {tier}
+                    </label>
                   ))}
                 </div>
               </div>
@@ -362,42 +427,17 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                   Region &amp; SIM Variant
                 </span>
                 <div className="space-y-2">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={selectedRegions.includes('USA')}
-                      onChange={() => toggleRegion('USA')}
-                      className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
-                    />
-                    <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex items-center justify-between flex-1">
-                      <span>USA (Dual eSIM LL/A)</span>
-                      <span className="text-[#434655] font-mono text-[12px]">9</span>
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={selectedRegions.includes('Japan')}
-                      onChange={() => toggleRegion('Japan')}
-                      className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
-                    />
-                    <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex items-center justify-between flex-1">
-                      <span>Japan (1 SIM + 1 eSIM J/A)</span>
-                      <span className="text-[#434655] font-mono text-[12px]">4</span>
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={selectedRegions.includes('HK')}
-                      onChange={() => toggleRegion('HK')}
-                      className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
-                    />
-                    <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors flex items-center justify-between flex-1">
-                      <span>HK / China (Dual Nano ZA/A)</span>
-                      <span className="text-[#434655] font-mono text-[12px]">3</span>
-                    </span>
-                  </label>
+                  {availableRegions.map((region) => (
+                    <label key={region} className="flex items-center gap-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={selectedRegions.includes(region)}
+                        onChange={() => toggleRegion(region)}
+                        className="w-4 h-4 rounded text-[#004ac6] accent-[#004ac6] cursor-pointer"
+                      />
+                      <span className="text-[13px] text-[#0b1c30] group-hover:text-[#004ac6] transition-colors">{region}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
             </div>
@@ -428,9 +468,20 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                 <div className="flex items-center gap-3">
                   <span className="text-[20px] font-bold text-[#0b1c30]">Available Stock</span>
                   <span className="px-3 py-1 rounded-full bg-[#e5eeff] text-[#004ac6] text-[13px] font-bold">
-                    {filteredProducts.length} Devices in Stock
+                    {filteredProducts.length} {filteredProducts.length === 1 ? 'Device' : 'Devices'}
                   </span>
                 </div>
+                <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-[#e2e8f0] bg-[#eff4ff] px-3 py-2 sm:max-w-sm">
+                  <span className="material-symbols-outlined text-[18px] text-[#565e74]">search</span>
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(event) => onSearchChange?.(event.target.value)}
+                    placeholder="Search products, brands, storage..."
+                    aria-label="Search catalog"
+                    className="w-full min-w-0 bg-transparent text-[13px] text-[#0b1c30] outline-none"
+                  />
+                </label>
                 <div className="flex items-center gap-3">
                   <span className="text-[13px] text-[#434655] hidden md:inline">Sort by:</span>
                   <div className="relative">
@@ -451,27 +502,11 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                 </div>
               </div>
 
-              {/* Active Pills Filter Strip */}
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#eff4ff]">
-                <span className="text-[11px] text-[#434655] uppercase tracking-wider mr-1 font-semibold">
-                  Active:
-                </span>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#e5eeff] text-[#0b1c30] rounded-full text-[12px] font-medium">
-                  <span>Brand New + Used 99%</span>
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#e5eeff] text-[#0b1c30] rounded-full text-[12px] font-medium">
-                  <span>{selectedStorage}</span>
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#e5eeff] text-[#0b1c30] rounded-full text-[12px] font-medium">
-                  <span>In-Store Rajshahi</span>
-                </div>
-                <button
-                  onClick={handleResetFilters}
-                  className="text-[12px] text-[#004ac6] hover:underline ml-2 font-semibold cursor-pointer"
-                >
-                  Clear All
-                </button>
-              </div>
+              {searchQuery.trim() && (
+                <p className="border-t border-[#eff4ff] pt-3 text-[12px] text-[#434655]">
+                  Search results for <strong className="text-[#0b1c30]">&ldquo;{searchQuery.trim()}&rdquo;</strong>
+                </p>
+              )}
             </div>
 
             {/* Product Cards Grid (6 High Fidelity Cards) */}
@@ -502,6 +537,9 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                       {phone.regionVariantBadge}
                     </span>
                     <img
+                      width={600}
+                      height={600}
+                      loading="lazy"
                       className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
                       alt={phone.title}
                       src={phone.imageUrl || phone.gallery.find((image) => image.isPrimary)?.src || phone.gallery[0]?.src || ''}
@@ -519,12 +557,12 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                           {phone.storages[0]?.capacity}
                         </span>
                       </div>
-                      <h3
+                      <h2
                         onClick={() => onSelectProduct(phone.id)}
                         className="text-[18px] font-bold text-[#0b1c30] group-hover:text-[#004ac6] transition-colors cursor-pointer"
                       >
                         {phone.model}
-                      </h3>
+                      </h2>
                       {(phone.weightSpecifications || phone.detailedDescription || phone.description) && (
                         <p className="text-[12px] text-[#434655] line-clamp-2">
                           {[phone.weightSpecifications, phone.detailedDescription || phone.description]
@@ -602,52 +640,31 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                 </div>
               ))}
             </div>
-
-            {/* Pagination Section */}
-            <div className="bg-white p-5 rounded-2xl shadow-xs border border-[#e2e8f0] flex flex-col sm:flex-row items-center justify-between gap-4">
-              <span className="text-[13px] text-[#434655]">
-                Showing <strong className="text-[#0b1c30]">1 - {filteredProducts.length}</strong> of{' '}
-                <strong className="text-[#0b1c30]">18</strong> authentic flagships
-              </span>
-              <div className="flex items-center gap-1.5">
+            {filteredProducts.length === 0 && (
+              <div className="rounded-2xl border border-[#e2e8f0] bg-white p-10 text-center">
+                <h2 className="text-[20px] font-bold text-[#0b1c30]">No matching products</h2>
+                <p className="mt-2 text-[14px] text-[#565e74]">Try changing your search or clearing one or more filters.</p>
                 <button
-                  onClick={() => setCurrentPage(1)}
-                  className={`w-10 h-10 rounded-xl text-[13px] font-bold shadow-xs transition-colors cursor-pointer ${
-                    currentPage === 1
-                      ? 'bg-[#004ac6] text-white'
-                      : 'bg-[#eff4ff] text-[#0b1c30] hover:bg-[#e5eeff]'
-                  }`}
+                  type="button"
+                  onClick={() => {
+                    handleResetFilters();
+                    onSearchChange?.('');
+                  }}
+                  className="mt-5 rounded-lg bg-[#004ac6] px-5 py-2.5 text-[13px] font-semibold text-white"
                 >
-                  1
-                </button>
-                <button
-                  onClick={() => setCurrentPage(2)}
-                  className={`w-10 h-10 rounded-xl text-[13px] font-medium transition-colors cursor-pointer ${
-                    currentPage === 2
-                      ? 'bg-[#004ac6] text-white'
-                      : 'bg-[#eff4ff] text-[#0b1c30] hover:bg-[#e5eeff]'
-                  }`}
-                >
-                  2
-                </button>
-                <button
-                  onClick={() => setCurrentPage(3)}
-                  className={`w-10 h-10 rounded-xl text-[13px] font-medium transition-colors cursor-pointer ${
-                    currentPage === 3
-                      ? 'bg-[#004ac6] text-white'
-                      : 'bg-[#eff4ff] text-[#0b1c30] hover:bg-[#e5eeff]'
-                  }`}
-                >
-                  3
-                </button>
-                <button
-                  onClick={() => setCurrentPage((p) => Math.min(3, p + 1))}
-                  className="flex items-center gap-1 px-4 h-10 rounded-xl bg-[#eff4ff] hover:bg-[#e5eeff] text-[#0b1c30] text-[13px] font-medium transition-colors ml-2 cursor-pointer"
-                >
-                  <span>Next</span>
-                  <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                  Clear filters and search
                 </button>
               </div>
+            )}
+
+            <div className="bg-white p-5 rounded-2xl shadow-xs border border-[#e2e8f0] flex flex-col sm:flex-row items-center justify-between gap-4">
+              <span className="text-[13px] text-[#434655]">
+                Showing <strong className="text-[#0b1c30]">{filteredProducts.length}</strong> of{' '}
+                <strong className="text-[#0b1c30]">{products.filter((product) => {
+                  if (brandFilter !== 'all' && product.brand !== brandFilter) return false;
+                  return selectedBrand === 'all' || product.brand === selectedBrand;
+                }).length}</strong> authentic flagships
+              </span>
             </div>
           </section>
         </div>
