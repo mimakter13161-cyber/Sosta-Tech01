@@ -1,0 +1,30 @@
+# Sosta Tech
+
+> Sosta Tech is a smartphone and consumer technology retailer serving customers in Rajshahi, Bangladesh.
+
+## Business
+
+Sosta Tech offers authentic smartphones, including Apple iPhone and Android flagship models, as well as mobile accessories. Product listings identify available models, condition, specifications, price, and stock. Customers can contact the store to confirm current availability and ask about purchase or delivery options.
+
+## Product authenticity and customer service
+
+Sosta Tech emphasizes product authenticity, transparent condition information, fair pricing, and customer service. Customers are welcome to inspect available devices in person before purchase. Warranty and replacement terms are provided with the relevant product or by contacting the store.
+
+## Physical location
+
+5th Floor, Theme Omar Plaza, New Market, Rajshahi, Bangladesh.
+
+## Contact
+
+- Phone: 01768695587
+- Facebook: https://www.facebook.com/sosta.techbd
+- YouTube: https://www.youtube.com/@SostaTechBD
+- Instagram: https://www.instagram.com/popular/sostatech/
+
+## Useful pages
+
+- Storefront: /
+- Smartphone catalog: /catalog
+- Android catalog: /android
+- Store location and contact: /contact
+- Product sitemap: /sitemap.xml

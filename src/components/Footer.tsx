@@ -1,5 +1,6 @@
 import React from 'react';
 import { useSiteSettings } from './SiteSettingsContext';
+import { STORE_PHONE } from '../data/mockData';
 
 interface FooterProps {
   onNavigate: (tab: string) => void;
@@ -39,12 +40,19 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               Physical Experience Store
             </span>
             <div className="space-y-2 text-[13px] text-[#434655]">
-              <p className="flex items-start gap-2.5">
+              <address className="flex items-start gap-2.5 not-italic">
                 <span className="material-symbols-outlined text-[18px] text-[#004ac6] shrink-0 mt-0.5">
                   location_on
                 </span>
-                <span>{settings.footerLocation}</span>
-              </p>
+                <span>5th Floor, Theme Omar Plaza, New Market, Rajshahi</span>
+              </address>
+              <a
+                className="flex items-center gap-2.5 hover:text-[#004ac6] transition-colors"
+                href={`tel:${STORE_PHONE}`}
+              >
+                <span className="material-symbols-outlined text-[18px] text-[#434655] shrink-0">call</span>
+                <span>Call: {STORE_PHONE}</span>
+              </a>
               <p className="flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-[18px] text-[#434655] shrink-0">
                   schedule
@@ -95,6 +103,24 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               >
                 <span className="material-symbols-outlined text-[18px]">public</span>
                 <span>{settings.facebookPageUrl.replace(/^https?:\/\//, '')}</span>
+              </a>
+              <a
+                className="flex items-center gap-2 hover:text-[#004ac6] transition-colors"
+                href="https://www.youtube.com/@SostaTechBD"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span className="material-symbols-outlined text-[18px]">smart_display</span>
+                <span>YouTube: youtube.com/@SostaTechBD</span>
+              </a>
+              <a
+                className="flex items-center gap-2 hover:text-[#004ac6] transition-colors"
+                href="https://www.instagram.com/popular/sostatech/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span className="material-symbols-outlined text-[18px]">photo_camera</span>
+                <span>Instagram: instagram.com/popular/sostatech</span>
               </a>
               <a
                 className="flex items-center gap-2 hover:text-[#006242] transition-colors"

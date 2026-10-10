@@ -26,3 +26,5 @@ Admin changes to inventory, customer stories, outlet settings, banners, and live
 ## Firebase Hosting deployment
 
 Build the storefront with `npm run build`, then deploy Hosting and Functions together with `firebase deploy --only hosting,functions`. Hosting serves `dist`, rewrites deep links to the SPA entry point, and routes `/robots.txt` and `/sitemap.xml` to host-aware Functions so their absolute URLs use the deployed domain. The sitemap includes public storefront routes and product detail URLs currently stored in Firestore.
+
+The public assets also include `/favicon.svg` for browser branding and `/llms.txt` with a concise, crawler-readable overview of Sosta Tech, its products, location, and contact channels.
