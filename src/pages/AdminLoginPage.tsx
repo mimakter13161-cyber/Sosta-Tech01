@@ -4,6 +4,8 @@ import { useSiteSettings } from '../components/SiteSettingsContext';
 interface AdminLoginPageProps {
   needsOwnerSetup: boolean;
   firebaseMode: boolean;
+  ownerSetupLoading: boolean;
+  ownerSetupError: string;
   onLogin: (email: string, password: string) => Promise<void>;
   onSetupOwner: (email: string, password: string) => Promise<void>;
 }
@@ -11,6 +13,8 @@ interface AdminLoginPageProps {
 export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   needsOwnerSetup,
   firebaseMode,
+  ownerSetupLoading,
+  ownerSetupError,
   onLogin,
   onSetupOwner,
 }) => {
@@ -70,22 +74,19 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
               <input autoComplete="new-password" type="password" required minLength={12} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1 w-full h-11 px-3 rounded-lg bg-[#eff4ff] border border-[#d4d9e5] font-normal focus:outline-none focus:ring-2 focus:ring-[#004ac6]/30" />
             </label>
           )}
+          {ownerSetupLoading && <p role="status" className="text-[12px] text-[#565e74]">Checking Firebase admin setup...</p>}
+          {ownerSetupError && <p role="alert" className="text-[12px] text-[#ba1a1a]">{ownerSetupError}</p>}
           {error && <p role="alert" className="text-[12px] text-[#ba1a1a]">{error}</p>}
-          <button disabled={isSubmitting} type="submit" className="mt-2 h-11 rounded-lg bg-[#004ac6] hover:bg-[#2563eb] text-white font-semibold disabled:opacity-60">
+          <button disabled={isSubmitting || (firebaseMode && ownerSetupLoading)} type="submit" className="mt-2 h-11 rounded-lg bg-[#004ac6] hover:bg-[#2563eb] text-white font-semibold disabled:opacity-60">
             {isSubmitting ? 'Please wait...' : needsOwnerSetup ? 'Create Owner Account' : 'Sign In'}
           </button>
         </form>
 
         <p className="mt-6 border-t border-[#e2e8f0] pt-4 text-[11px] leading-relaxed text-[#565e74]">
           {firebaseMode
-            ? 'Sign-in and roles are verified with Firebase Authentication and the users collection. The first Owner account must be provisioned in Firebase Console.'
+            ? 'Credentials are stored by Firebase Authentication, and admin roles are verified against the Firestore users collection. First-time Owner setup is securely initialized through Firebase.'
             : 'This client-only demo stores account records in this browser. Configure Firebase Authentication before exposing admin access to the public internet.'}
         </p>
-        {firebaseMode && (
-          <p className="mt-3 rounded-lg bg-[#fff0d0] p-3 text-[11px] leading-relaxed text-[#573b00]">
-            Local fallback (only when Firebase Auth fails and this browser has no local admins): <strong>admin@sostatech.bd</strong> / <strong>admin123</strong>. This account must change its password immediately after sign-in.
-          </p>
-        )}
       </section>
     </main>
   );

@@ -51,6 +51,37 @@ const requireStoreAdmin = async (uid: string | undefined) => {
 
 export const getFacebookFeed = onCall(async () => readCachedFacebookFeed());
 
+export const getOwnerSetupStatus = onCall(async () => {
+  const users = await db.collection('users').limit(1).get();
+  return { needsOwnerSetup: users.empty };
+});
+
+export const initializeOwnerAccount = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  const email = String(request.auth?.token.email || '').trim().toLowerCase();
+  if (!uid || !email) {
+    throw new HttpsError('unauthenticated', 'Create or sign in to a Firebase Authentication account to initialize the Owner.');
+  }
+  const profileRef = db.collection('users').doc(uid);
+  await db.runTransaction(async (transaction) => {
+    const existingProfile = await transaction.get(profileRef);
+    if (existingProfile.exists) {
+      if (existingProfile.data()?.role === 'owner') return;
+      throw new HttpsError('already-exists', 'This Firebase account already has an admin profile.');
+    }
+    const existingUsers = await transaction.get(db.collection('users').limit(1));
+    if (!existingUsers.empty) {
+      throw new HttpsError('already-exists', 'An admin profile already exists. Ask the existing Owner to provision your account.');
+    }
+    transaction.create(profileRef, {
+      email,
+      role: 'owner',
+      createdAt: new Date().toISOString(),
+    });
+  });
+  return { id: uid, email, role: 'owner' };
+});
+
 export const syncFacebookFeed = onCall(
   { secrets: [facebookPageAccessToken] },
   async (request): Promise<FacebookFeed> => {

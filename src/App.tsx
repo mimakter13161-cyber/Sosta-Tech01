@@ -17,6 +17,7 @@ import { LiveEditorOverlay } from './components/LiveEditorOverlay';
 import {
   changeFirebasePassword,
   configureFirebaseAuth,
+  createFirebaseOwner,
   createFirebaseManager,
   deleteHappyCustomer,
   isFirebaseConfigured,
@@ -26,6 +27,7 @@ import {
   subscribeToPublicStoreData,
   readAdminProfile,
   readAdminProfiles,
+  readOwnerSetupStatus,
   readHappyCustomers,
   readProducts,
   readSiteSettings,
@@ -96,9 +98,6 @@ const loadAdminUsers = (): AdminUser[] => {
     return [];
   }
 };
-
-const DEFAULT_FALLBACK_OWNER_EMAIL = 'admin@sostatech.bd';
-const DEFAULT_FALLBACK_OWNER_PASSWORD = 'admin123';
 
 const sortHappyCustomers = (customers: HappyCustomer[]) =>
   [...customers].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
@@ -210,11 +209,16 @@ export default function App() {
   const [localFallbackUsers, setLocalFallbackUsers] = useState<AdminUser[]>(loadAdminUsers);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>(() => isFirebaseConfigured ? [] : loadAdminUsers());
   const [authBackend, setAuthBackend] = useState<'firebase' | 'local'>(() =>
-    (window.sessionStorage.getItem('sosta-admin-backend-v1') as 'firebase' | 'local') || (isFirebaseConfigured ? 'firebase' : 'local')
+    isFirebaseConfigured ? 'firebase' : 'local'
   );
+  const [needsOwnerSetup, setNeedsOwnerSetup] = useState(false);
+  const [ownerSetupLoading, setOwnerSetupLoading] = useState(isFirebaseConfigured);
+  const [ownerSetupError, setOwnerSetupError] = useState('');
   const [cloudDataReady, setCloudDataReady] = useState(!isFirebaseConfigured);
   const [networkEpoch, setNetworkEpoch] = useState(0);
-  const [activeAdminId, setActiveAdminId] = useState<string | null>(() => window.sessionStorage.getItem('sosta-admin-session-v1'));
+  const [activeAdminId, setActiveAdminId] = useState<string | null>(() =>
+    isFirebaseConfigured ? null : window.sessionStorage.getItem('sosta-admin-session-v1')
+  );
   const currentAdmin = adminUsers.find((user) => user.id === activeAdminId) || null;
   const [activeTab, setActiveTab] = useState<string>(
     () => tabForPath(window.location.pathname)
@@ -713,24 +717,54 @@ export default function App() {
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
-    void configureFirebaseAuth();
-    return subscribeToFirebaseAuth((uid) => {
-      if (!uid) {
-        if (window.sessionStorage.getItem('sosta-admin-backend-v1') !== 'local') setActiveAdminId(null);
-        return;
+    let isDisposed = false;
+    let unsubscribe: () => void = () => undefined;
+    const initializeAuth = async () => {
+      try {
+        await configureFirebaseAuth();
+        const setupNeeded = await readOwnerSetupStatus();
+        if (!isDisposed) {
+          setNeedsOwnerSetup(setupNeeded);
+          setOwnerSetupError('');
+          setOwnerSetupLoading(false);
+        }
+      } catch (error) {
+        if (!isDisposed) {
+          setOwnerSetupError(error instanceof Error ? error.message : 'Could not check Firebase Owner setup.');
+          setOwnerSetupLoading(false);
+        }
       }
-      void readAdminProfile(uid).then(async (profile) => {
-        if (!profile) {
+      if (isDisposed) return;
+      unsubscribe = subscribeToFirebaseAuth((uid) => {
+        if (!uid) {
           setActiveAdminId(null);
           return;
         }
-        setActiveAdminId(profile.id);
-        setAuthBackend('firebase');
-        const profiles = profile.role === 'owner' ? await readAdminProfiles() : [profile];
-        if (profiles) setAdminUsers(profiles);
-        window.sessionStorage.setItem('sosta-admin-session-v1', profile.id);
-      }).catch(() => setActiveAdminId(null));
-    });
+        void readAdminProfile(uid).then(async (profile) => {
+          if (isDisposed) return;
+          if (!profile) {
+            setActiveAdminId(null);
+            void signOutAdmin();
+            return;
+          }
+          setActiveAdminId(profile.id);
+          setAuthBackend('firebase');
+          setOwnerSetupError('');
+          const profiles = profile.role === 'owner' ? await readAdminProfiles() : [profile];
+          if (!isDisposed && profiles) setAdminUsers(profiles);
+        }).catch((error: unknown) => {
+          if (!isDisposed) {
+            setActiveAdminId(null);
+            setOwnerSetupError(error instanceof Error ? error.message : 'Could not verify the Firebase admin profile.');
+          }
+        });
+      });
+    };
+    void initializeAuth();
+    return () => {
+      isDisposed = true;
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -820,8 +854,13 @@ export default function App() {
   }, [isDirty]);
 
   const establishAdminSession = (user: AdminUser, backend: 'firebase' | 'local') => {
-    window.sessionStorage.setItem('sosta-admin-session-v1', user.id);
-    window.sessionStorage.setItem('sosta-admin-backend-v1', backend);
+    if (backend === 'local') {
+      window.sessionStorage.setItem('sosta-admin-session-v1', user.id);
+      window.sessionStorage.setItem('sosta-admin-backend-v1', backend);
+    } else {
+      window.sessionStorage.removeItem('sosta-admin-session-v1');
+      window.sessionStorage.removeItem('sosta-admin-backend-v1');
+    }
     setAuthBackend(backend);
     setActiveAdminId(user.id);
     window.history.replaceState({}, '', '/admin');
@@ -832,34 +871,12 @@ export default function App() {
 
   const handleAdminLogin = async (email: string, password: string) => {
     if (isFirebaseConfigured) {
-      try {
-        const user = await signInAdmin(email.trim().toLowerCase(), password);
-        if (!user) throw new Error('Firebase Authentication is unavailable.');
-        establishAdminSession(user, 'firebase');
-        const profiles = user.role === 'owner' ? await readAdminProfiles() : [user];
-        if (profiles) setAdminUsers(profiles);
-        return;
-      } catch (firebaseError) {
-        const normalizedEmail = email.trim().toLowerCase();
-        let fallbackUsers = localFallbackUsers;
-        if (
-          fallbackUsers.length === 0 &&
-          normalizedEmail === DEFAULT_FALLBACK_OWNER_EMAIL &&
-          password === DEFAULT_FALLBACK_OWNER_PASSWORD
-        ) {
-          const defaultOwner = { ...(await createAdminUser(DEFAULT_FALLBACK_OWNER_EMAIL, DEFAULT_FALLBACK_OWNER_PASSWORD, 'owner')), mustChangePassword: true };
-          fallbackUsers = [defaultOwner];
-          setLocalFallbackUsers(fallbackUsers);
-        }
-        const fallbackUser = fallbackUsers.find((candidate) => candidate.email === normalizedEmail);
-        if (fallbackUser && await verifyAdminPassword(fallbackUser, password)) {
-          setAdminUsers(fallbackUsers);
-          establishAdminSession(fallbackUser, 'local');
-          showToast('Signed in using local fallback authentication. Change the default password immediately.');
-          return;
-        }
-        throw new Error(`Firebase sign-in failed (${firebaseError instanceof Error ? firebaseError.message : 'unknown error'}). Use an existing local fallback account${fallbackUsers.length === 0 ? ' or the initial Owner credentials shown in setup docs' : ''}.`);
-      }
+      const user = await signInAdmin(email.trim().toLowerCase(), password);
+      if (!user) throw new Error('Firebase Authentication is unavailable.');
+      establishAdminSession(user, 'firebase');
+      const profiles = user.role === 'owner' ? await readAdminProfiles() : [user];
+      if (profiles) setAdminUsers(profiles);
+      return;
     }
     const user = adminUsers.find((candidate) => candidate.email === email.trim().toLowerCase());
     if (!user || !(await verifyAdminPassword(user, password))) {
@@ -869,7 +886,16 @@ export default function App() {
   };
 
   const handleSetupOwner = async (email: string, password: string) => {
-    if (isFirebaseConfigured) throw new Error('Create the first Owner in Firebase Authentication and assign role "owner" to users/{uid} in Firestore, then sign in here.');
+    if (isFirebaseConfigured) {
+      if (!needsOwnerSetup) throw new Error('An Owner account is already set up.');
+      if (password.length < 12) throw new Error('Use a password with at least 12 characters.');
+      const owner = await createFirebaseOwner(email.trim().toLowerCase(), password);
+      setAdminUsers([owner]);
+      setNeedsOwnerSetup(false);
+      setOwnerSetupError('');
+      establishAdminSession(owner, 'firebase');
+      return;
+    }
     if (adminUsers.some((user) => user.role === 'owner')) throw new Error('An owner account is already set up.');
     if (password.length < 12) throw new Error('Use a password with at least 12 characters.');
     const owner = await createAdminUser(email, password, 'owner');
@@ -1479,8 +1505,10 @@ export default function App() {
           />
         ) : (
           <AdminLoginPage
-            needsOwnerSetup={!isFirebaseConfigured && !adminUsers.some((user) => user.role === 'owner')}
+            needsOwnerSetup={isFirebaseConfigured ? needsOwnerSetup : !adminUsers.some((user) => user.role === 'owner')}
             firebaseMode={isFirebaseConfigured}
+            ownerSetupLoading={ownerSetupLoading}
+            ownerSetupError={ownerSetupError}
             onLogin={handleAdminLogin}
             onSetupOwner={handleSetupOwner}
           />

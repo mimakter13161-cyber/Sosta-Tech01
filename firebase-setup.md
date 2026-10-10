@@ -11,18 +11,13 @@ Required client config keys:
 - `VITE_FIREBASE_MESSAGING_SENDER_ID`
 - `VITE_FIREBASE_APP_ID`
 
-In Firebase Console, enable Email/Password under Authentication, create the Firestore database, and enable Cloud Storage. The first Owner must be provisioned outside the client to avoid public self-assigned Owner roles:
-
-1. Create the initial account under Authentication > Users.
-2. Copy that account's UID.
-3. Create `users/{uid}` in Firestore with `email`, `role: "owner"`, and `createdAt` fields.
-4. Sign in at `/admin` with the same email and password.
+In Firebase Console, enable Email/Password under Authentication, create the Firestore database, and enable Cloud Storage. Deploy the callable Functions and Firestore rules. On the first visit to `/admin`, create the Owner account in the setup form. Firebase Authentication stores the credential; the `initializeOwnerAccount` callable atomically creates `users/{uid}` with the Owner role only while the admin profile collection is empty. Passwords are never written to Firestore. Later visits and other browsers verify the signed-in Firebase account against its Firestore profile.
 
 If Firebase Auth returns `auth/api-key-not-valid`, replace `VITE_FIREBASE_API_KEY` with the Web API key from that same Firebase project's Project settings > General > Your apps. Check that the key's API restrictions permit Identity Toolkit API and that its HTTP referrer restrictions include the local development host and deployed site domain. Restart Vite after changing environment variables.
 
-When Firebase Auth is unavailable, the login page falls back to salted password hashes in this browser. If there are no local accounts, the one-time fallback Owner is `admin@sostatech.bd` / `admin123`; the first successful sign-in is blocked on the Change Password dialog. This fallback only grants access in the current browser profile and is not a substitute for fixing Firebase Auth before production.
+When Firebase is not configured, the development-only login page uses salted password hashes in this browser's LocalStorage. This local mode is not shared across devices and is not a substitute for configuring Firebase Authentication before production. When Firebase is configured, local fallback credentials are not accepted.
 
-The Owner can then create, remove, and reset Store Manager accounts from User Management. Callable Functions use the Firebase Admin SDK, and Firestore rules validate all client writes against the `users/{uid}.role` profile.
+The Owner can then create, remove, and reset Store Manager accounts from User Management. Callable Functions use the Firebase Admin SDK, and Firestore rules validate all client writes against the `users/{uid}.role` profile. Firebase Authentication uses browser-local persistence so a valid admin session survives reloads and browser restarts; signing out from the admin portal ends that session.
 
 Deploy the rules and Manager administration functions from the repository root:
 

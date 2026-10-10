@@ -3,6 +3,7 @@ import {
   Auth,
   EmailAuthProvider,
   browserLocalPersistence,
+  createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
   reauthenticateWithCredential,
@@ -247,7 +248,41 @@ export const signInAdmin = async (email: string, password: string) => {
     throw new Error('This Firebase account has no admin role assigned. Ask the Main Owner to provision it.');
   }
   const data = profile.data();
+  if (data.role !== 'owner' && data.role !== 'manager') {
+    await signOut(firebaseAuth);
+    throw new Error('This Firebase account does not have a valid admin role.');
+  }
   return { id: credential.user.uid, email: credential.user.email || email, role: data.role as AdminRole, passwordSalt: '', passwordHash: '' } satisfies AdminUser;
+};
+
+export const readOwnerSetupStatus = async () => {
+  if (!firebaseFunctions) throw new Error('Firebase Functions are unavailable.');
+  const getSetupStatus = httpsCallable<undefined, { needsOwnerSetup: boolean }>(firebaseFunctions, 'getOwnerSetupStatus');
+  return (await getSetupStatus()).data.needsOwnerSetup;
+};
+
+export const createFirebaseOwner = async (email: string, password: string) => {
+  if (!firebaseAuth || !firebaseFunctions) throw new Error('Firebase Authentication or Functions are unavailable.');
+  await configureFirebaseAuth();
+  let user;
+  try {
+    ({ user } = await createUserWithEmailAndPassword(firebaseAuth, email, password));
+  } catch (error) {
+    if (!(error && typeof error === 'object' && 'code' in error && error.code === 'auth/email-already-in-use')) throw error;
+    ({ user } = await signInWithEmailAndPassword(firebaseAuth, email, password));
+  }
+
+  try {
+    const initializeOwner = httpsCallable<undefined, { id: string; email: string; role: AdminRole }>(firebaseFunctions, 'initializeOwnerAccount');
+    const profile = (await initializeOwner()).data;
+    if (profile.id !== user.uid || profile.role !== 'owner') {
+      throw new Error('Firebase did not confirm the initial Owner profile.');
+    }
+    return { ...profile, passwordSalt: '', passwordHash: '' } satisfies AdminUser;
+  } catch (error) {
+    await signOut(firebaseAuth);
+    throw error;
+  }
 };
 
 export const signOutAdmin = async () => {
