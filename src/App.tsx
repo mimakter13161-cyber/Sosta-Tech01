@@ -220,6 +220,7 @@ export default function App() {
     () => tabForPath(window.location.pathname)
   ); // 'home' | 'iphones' | 'android' | 'pdp' | 'compare' | 'store-location' | 'portal'
   const [activeAdminSection, setActiveAdminSection] = useState('inventory');
+  const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
   const [selectedProductId, setSelectedProductId] = useState<string>(() => window.location.pathname.split('/')[2] || 'iphone-16-pro-max');
   const [liveEditorEnabled, setLiveEditorEnabled] = useState(false);
   const [savedLiveEdits, setSavedLiveEdits] = useState<LiveEditMap>(loadLiveEdits);
@@ -240,6 +241,11 @@ export default function App() {
   const isSavingRef = useRef(false);
   const isPendingSyncRunningRef = useRef(false);
   const routePathRef = useRef(window.location.pathname);
+
+  useEffect(() => {
+    window.history.scrollRestoration = 'manual';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [activeAdminSection, activeTab, currentPath]);
   
   // Shopping Cart state
   const [cartItems, setCartItems] = useState<CartItem[]>([
@@ -310,8 +316,8 @@ export default function App() {
     if (request.tab !== 'iphones') setCatalogCategory('');
     if (window.location.pathname !== request.path) window.history.pushState({}, '', request.path);
     routePathRef.current = request.path;
+    setCurrentPath(request.path);
     setActiveTab(request.tab);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const requestNavigation = (request: NavigationRequest) => {
@@ -794,6 +800,7 @@ export default function App() {
         return;
       }
       routePathRef.current = path;
+      setCurrentPath(path);
       if (request.productId) setSelectedProductId(request.productId);
       if (request.tab !== 'iphones') setCatalogCategory('');
       setActiveTab(request.tab);
@@ -819,6 +826,7 @@ export default function App() {
     setActiveAdminId(user.id);
     window.history.replaceState({}, '', '/admin');
     routePathRef.current = '/admin';
+    setCurrentPath('/admin');
     setActiveTab('portal');
   };
 
@@ -940,6 +948,7 @@ export default function App() {
     setActiveAdminId(null);
     window.history.replaceState({}, '', '/admin/login');
     routePathRef.current = '/admin/login';
+    setCurrentPath('/admin/login');
     setActiveTab('portal');
   };
 
