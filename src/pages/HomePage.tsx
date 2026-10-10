@@ -28,12 +28,13 @@ export const HomePage: React.FC<HomePageProps> = ({
 }) => {
   const settings = useSiteSettings();
   const [activeHeroBanner, setActiveHeroBanner] = useState(0);
-  const [showAllHomeProducts, setShowAllHomeProducts] = useState(false);
+  const [visibleHomeProductCount, setVisibleHomeProductCount] = useState(10);
   const homeProducts = useMemo(() => {
     const selectedProducts = products.filter((product) => product.showOnHomePage ?? product.featured);
-    return selectedProducts.length ? selectedProducts : products.slice(0, 10);
+    const selectedProductIds = new Set(selectedProducts.map((product) => product.id));
+    return [...selectedProducts, ...products.filter((product) => !selectedProductIds.has(product.id))];
   }, [products]);
-  const visibleHomeProducts = showAllHomeProducts ? products : homeProducts.slice(0, 10);
+  const visibleHomeProducts = homeProducts.slice(0, visibleHomeProductCount);
   const latestHappyCustomers = [...happyCustomers]
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, 6);
@@ -461,15 +462,14 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             ))}
           </div>
-          {products.length > homeProducts.length && (
+          {homeProducts.length > visibleHomeProducts.length && (
             <div className="flex justify-center">
               <button
                 type="button"
-                onClick={() => setShowAllHomeProducts((showAll) => !showAll)}
-                aria-expanded={showAllHomeProducts}
+                onClick={() => setVisibleHomeProductCount((count) => Math.min(count + 8, homeProducts.length))}
                 className="rounded-xl bg-[#004ac6] px-6 py-3 text-[14px] font-semibold text-white transition-colors hover:bg-[#2563eb]"
               >
-                {showAllHomeProducts ? 'Show Less' : 'See More Products'}
+                Load More Products
               </button>
             </div>
           )}

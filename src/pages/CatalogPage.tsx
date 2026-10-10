@@ -5,6 +5,8 @@ import { useSiteSettings } from '../components/SiteSettingsContext';
 interface CatalogPageProps {
   products: Product[];
   brandFilter?: 'Apple' | 'Samsung' | 'all';
+  categoryFilter?: string;
+  onCategoryChange?: (category: string) => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
   onSelectProduct: (productId: string) => void;
@@ -16,6 +18,8 @@ interface CatalogPageProps {
 export const CatalogPage: React.FC<CatalogPageProps> = ({
   products,
   brandFilter = 'all',
+  categoryFilter = '',
+  onCategoryChange,
   searchQuery = '',
   onSearchChange,
   onSelectProduct,
@@ -31,6 +35,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(maxAvailablePrice);
   const [selectedBrand, setSelectedBrand] = useState<string>(brandFilter);
+  const [selectedCategory, setSelectedCategory] = useState(categoryFilter || 'all');
   const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [selectedSeries, setSelectedSeries] = useState<string[]>([]);
   const [selectedStorage, setSelectedStorage] = useState<string>('');
@@ -62,6 +67,10 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
     setMinPrice((current) => Math.min(current, maxAvailablePrice));
   }, [maxAvailablePrice]);
 
+  useEffect(() => {
+    setSelectedCategory(categoryFilter || 'all');
+  }, [categoryFilter]);
+
   // Toggle helpers
   const toggleCondition = (cond: string) => {
     setSelectedConditions((prev) =>
@@ -87,6 +96,8 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
     setMinPrice(0);
     setMaxPrice(maxAvailablePrice);
     setSelectedBrand(brandFilter);
+    setSelectedCategory('all');
+    onCategoryChange?.('');
     setSelectedConditions([]);
     setSelectedSeries([]);
     setSelectedStorage('');
@@ -102,6 +113,8 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
       if (brandFilter === 'Apple' && p.brand !== 'Apple') return false;
       if (brandFilter === 'Samsung' && p.brand !== 'Samsung') return false;
       if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
+      if (selectedCategory === 'Pre-Owned' && !p.condition.includes('Pre-Owned')) return false;
+      if (selectedCategory !== 'all' && selectedCategory !== 'Pre-Owned' && p.series !== selectedCategory) return false;
 
       const price = Number.isFinite(p.basePrice) ? p.basePrice : 0;
       if (price < minPrice || price > maxPrice) return false;
@@ -155,7 +168,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
       if (sortBy === 'Battery Health: Highest') return (b.batteryHealth || 100) - (a.batteryHealth || 100);
       return 0; // Latest
     });
-  }, [products, brandFilter, searchQuery, selectedBrand, minPrice, maxPrice, inStockOnly, preOrder, selectedConditions, selectedSeries, selectedStorage, selectedRegions, selectedBatteryTier, sortBy]);
+  }, [products, brandFilter, categoryFilter, searchQuery, selectedBrand, selectedCategory, minPrice, maxPrice, inStockOnly, preOrder, selectedConditions, selectedSeries, selectedStorage, selectedRegions, selectedBatteryTier, sortBy]);
 
   return (
     <div className="flex flex-col w-full">
@@ -344,6 +357,8 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                   value={selectedBrand}
                   onChange={(event) => {
                     setSelectedBrand(event.target.value);
+                    setSelectedCategory('all');
+                    onCategoryChange?.('');
                     setSelectedConditions([]);
                     setSelectedSeries([]);
                     setSelectedStorage('');
@@ -355,6 +370,22 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                 >
                   {brandFilter === 'all' && <option value="all">All brands</option>}
                   {availableBrands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
+                </select>
+                <select
+                  value={selectedCategory}
+                  onChange={(event) => {
+                    const category = event.target.value;
+                    setSelectedCategory(category);
+                    onCategoryChange?.(category === 'all' ? '' : category);
+                  }}
+                  aria-label="Filter by category"
+                  className="h-10 w-full rounded-lg border border-[#e2e8f0] bg-[#eff4ff] px-3 text-[13px] text-[#0b1c30]"
+                >
+                  <option value="all">All categories</option>
+                  {availableSeries.map((series) => <option key={series} value={series}>{series}</option>)}
+                  {availableConditions.some((condition) => condition.includes('Pre-Owned')) && (
+                    <option value="Pre-Owned">Pre-Owned</option>
+                  )}
                 </select>
                 <div className="space-y-2">
                   {availableSeries.map((series) => (

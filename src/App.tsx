@@ -267,6 +267,7 @@ export default function App() {
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
+  const [catalogCategory, setCatalogCategory] = useState('');
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -306,6 +307,7 @@ export default function App() {
 
   const commitNavigation = (request: NavigationRequest) => {
     if (request.productId) setSelectedProductId(request.productId);
+    if (request.tab !== 'iphones') setCatalogCategory('');
     if (window.location.pathname !== request.path) window.history.pushState({}, '', request.path);
     routePathRef.current = request.path;
     setActiveTab(request.tab);
@@ -793,6 +795,7 @@ export default function App() {
       }
       routePathRef.current = path;
       if (request.productId) setSelectedProductId(request.productId);
+      if (request.tab !== 'iphones') setCatalogCategory('');
       setActiveTab(request.tab);
     };
     window.addEventListener('popstate', syncRoute);
@@ -1331,6 +1334,7 @@ export default function App() {
               facebookFeed={facebookFeed}
               onSelectProduct={handleSelectProduct}
               onNavigateCatalog={(cat) => {
+                setCatalogCategory(cat && cat !== 'Android' ? cat : '');
                 if (cat === 'Android') {
                   navigateToTab('android');
                 } else {
@@ -1364,6 +1368,8 @@ export default function App() {
             <CatalogPage
               products={products}
               brandFilter="all"
+              categoryFilter={catalogCategory}
+              onCategoryChange={setCatalogCategory}
               searchQuery={searchQuery}
               onSearchChange={handleSearch}
               onSelectProduct={handleSelectProduct}
