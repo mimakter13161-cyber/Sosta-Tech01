@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isOwner() {
+      return role() == 'owner';
+    }
+
+    function isManagerOrOwner() {
+      return role() in ['owner', 'manager'];
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isManagerOrOwner();
+    }
+
+    match /siteSettings/{settingsId} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+
+    match /happyCustomers/{customerId} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isOwner());
+      allow create, update, delete: if isOwner();
+    }
+  }
+}

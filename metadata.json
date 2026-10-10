@@ -1,0 +1,6 @@
+{
+  "name": "Sosta Tech Flagship",
+  "description": "Authentic Apple and Android flagship smartphones in Rajshahi at Theme Omar Plaza with warranty, instant local delivery, and live stock tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
