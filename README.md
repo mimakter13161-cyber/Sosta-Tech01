@@ -28,3 +28,16 @@ Admin changes to inventory, customer stories, outlet settings, banners, and live
 Build the storefront with `npm run build`, then deploy Hosting and Functions together with `firebase deploy --only hosting,functions`. Hosting serves `dist`, rewrites deep links to the SPA entry point, and routes `/robots.txt` and `/sitemap.xml` to host-aware Functions so their absolute URLs use the deployed domain. The sitemap includes public storefront routes and product detail URLs currently stored in Firestore.
 
 The public assets also include `/favicon.svg` for browser branding and `/llms.txt` with a concise, crawler-readable overview of Sosta Tech, its products, location, and contact channels.
+
+## Facebook feed synchronization
+
+The storefront uses cached Facebook Page posts when available and keeps the Facebook Page Plugin as a fallback. To enable the Admin Portal's **Sync Facebook Feed** action, set the numeric Page ID in `functions/.env.<firebase-project-id>` and set a Page access token without putting it in source control:
+
+```powershell
+firebase functions:secrets:set FACEBOOK_PAGE_ACCESS_TOKEN
+firebase deploy --only functions
+```
+
+For example, `functions/.env.<firebase-project-id>` should contain `FACEBOOK_PAGE_ID="1234567890"`; keep the actual access token in Secret Manager, never in an env file or source control.
+
+The token must belong to the configured Page and include permission to read its posts. The callable sync checks the signed-in Firebase user's Owner/Manager role, fetches the latest posts server-side, and updates the shared Firestore cache only after a successful Graph API response. Public storefronts read that cached feed; a fetch or token failure leaves the last successful cache untouched and the embedded Facebook Page Plugin available when there is no cached feed. Local-browser-only admin accounts cannot use the remote sync function; sign in with an authorized Firebase admin account.

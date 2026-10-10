@@ -56,6 +56,19 @@ export interface SiteSettings {
   storeHours: string;
 }
 
+export interface FacebookPost {
+  id: string;
+  message: string;
+  permalinkUrl: string;
+  createdAt: string;
+  imageUrl?: string;
+}
+
+export interface FacebookFeed {
+  posts: FacebookPost[];
+  syncedAt: string | null;
+}
+
 export interface LiveEditValue {
   route: string;
   selector: string;

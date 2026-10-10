@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { HappyCustomer, Product, Review } from '../types';
+import { FacebookFeed, HappyCustomer, Product, Review } from '../types';
 import { STORE_MAP_IMAGE } from '../data/mockData';
 import { useSiteSettings } from '../components/SiteSettingsContext';
 
@@ -7,6 +7,7 @@ interface HomePageProps {
   products: Product[];
   reviews: Review[];
   happyCustomers: HappyCustomer[];
+  facebookFeed: FacebookFeed;
   onSelectProduct: (productId: string) => void;
   onNavigateCatalog: (category?: string) => void;
   onNavigateStore: () => void;
@@ -18,6 +19,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   products,
   reviews,
   happyCustomers,
+  facebookFeed,
   onSelectProduct,
   onNavigateCatalog,
   onNavigateStore,
@@ -732,6 +734,41 @@ export const HomePage: React.FC<HomePageProps> = ({
               Visit Facebook Page
             </a>
           </div>
+          {facebookFeed.posts.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {facebookFeed.posts.map((post) => (
+                <article key={post.id} className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-xs">
+                  {post.imageUrl && (
+                    <a href={post.permalinkUrl} target="_blank" rel="noopener noreferrer" aria-label="Open Facebook post">
+                      <img
+                        src={post.imageUrl}
+                        alt="Image from a Sosta Tech Facebook post"
+                        width={640}
+                        height={480}
+                        loading="lazy"
+                        className="aspect-[4/3] w-full object-cover"
+                      />
+                    </a>
+                  )}
+                  <div className="space-y-3 p-5">
+                    <p className="whitespace-pre-line break-words text-[13px] leading-relaxed text-[#434655]">
+                      {post.message || 'View this update on the Sosta Tech Facebook page.'}
+                    </p>
+                    <div className="flex items-center justify-between gap-3 text-[11px] text-[#737686]">
+                      <time dateTime={post.createdAt}>{new Date(post.createdAt).toLocaleDateString()}</time>
+                      <a href={post.permalinkUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#0866ff] hover:underline">
+                        View on Facebook
+                      </a>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+          <div>
+            <p className="mb-3 rounded-lg bg-[#eff4ff] px-4 py-3 text-[12px] leading-relaxed text-[#565e74]">
+              Showing the live Facebook Page timeline. If Facebook does not load here, open the page directly using the link above.
+            </p>
           <div className="overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f8f9ff]">
             <iframe
               title="Latest posts and offers from Sosta Tech on Facebook"
@@ -745,6 +782,16 @@ export const HomePage: React.FC<HomePageProps> = ({
               allowFullScreen
             />
           </div>
+          </div>
+          )}
+          {facebookFeed.posts.length > 0 && facebookFeed.syncedAt && (
+            <p className="mt-3 text-[11px] text-[#737686]">
+              Latest saved Facebook updates · Last synced {new Date(facebookFeed.syncedAt).toLocaleString()} ·{' '}
+              <a href={settings.facebookPageUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#0866ff] hover:underline">
+                Visit Facebook for more
+              </a>
+            </p>
+          )}
         </div>
       </section>
 

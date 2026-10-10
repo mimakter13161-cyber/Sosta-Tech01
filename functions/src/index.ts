@@ -1,12 +1,122 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { defineSecret, defineString } from 'firebase-functions/params';
 import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
 
 initializeApp();
 
 const auth = getAuth();
 const db = getFirestore();
+const facebookPageAccessToken = defineSecret('FACEBOOK_PAGE_ACCESS_TOKEN');
+const facebookPageId = defineString('FACEBOOK_PAGE_ID', { default: '' });
+const FACEBOOK_FEED_CACHE_PATH = ['publicContent', 'facebookFeed'] as const;
+
+interface FacebookPost {
+  id: string;
+  message: string;
+  permalinkUrl: string;
+  createdAt: string;
+  imageUrl?: string;
+}
+
+interface FacebookFeed {
+  posts: FacebookPost[];
+  syncedAt: string | null;
+}
+
+const readCachedFacebookFeed = async (): Promise<FacebookFeed> => {
+  const snapshot = await db.doc(FACEBOOK_FEED_CACHE_PATH.join('/')).get();
+  if (!snapshot.exists) return { posts: [], syncedAt: null };
+  const data = snapshot.data();
+  const posts = Array.isArray(data?.posts) ? data.posts : [];
+  return {
+    posts: posts.filter((post): post is FacebookPost =>
+      Boolean(post && typeof post.id === 'string' &&
+        typeof post.message === 'string' &&
+        typeof post.permalinkUrl === 'string' &&
+        typeof post.createdAt === 'string')
+    ).slice(0, 10),
+    syncedAt: typeof data?.syncedAt === 'string' ? data.syncedAt : null,
+  };
+};
+
+const requireStoreAdmin = async (uid: string | undefined) => {
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in with an admin account to sync the Facebook feed.');
+  const profile = await db.collection('users').doc(uid).get();
+  if (!['owner', 'manager'].includes(String(profile.data()?.role || ''))) {
+    throw new HttpsError('permission-denied', 'Only Sosta Tech administrators can sync the Facebook feed.');
+  }
+};
+
+export const getFacebookFeed = onCall(async () => readCachedFacebookFeed());
+
+export const syncFacebookFeed = onCall(
+  { secrets: [facebookPageAccessToken] },
+  async (request): Promise<FacebookFeed> => {
+    await requireStoreAdmin(request.auth?.uid);
+    const token = facebookPageAccessToken.value();
+    const pageId = facebookPageId.value().trim();
+    if (!token || !pageId) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Facebook feed sync is not configured. Set FACEBOOK_PAGE_ACCESS_TOKEN and FACEBOOK_PAGE_ID in Firebase Functions.'
+      );
+    }
+    if (!/^\d+$/.test(pageId)) {
+      throw new HttpsError('failed-precondition', 'FACEBOOK_PAGE_ID must be the numeric ID of the Sosta Tech Facebook Page.');
+    }
+
+    try {
+      const graphUrl = new URL(`https://graph.facebook.com/v22.0/${pageId}/posts`);
+      graphUrl.searchParams.set('fields', 'id,message,permalink_url,created_time,full_picture');
+      graphUrl.searchParams.set('limit', '10');
+      const response = await fetch(graphUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(12_000),
+      });
+      const result: unknown = await response.json();
+      if (!response.ok) {
+        const graphError = result && typeof result === 'object' && 'error' in result
+          ? (result as { error?: { code?: number; message?: string } }).error
+          : undefined;
+        const expiredToken = graphError?.code === 190;
+        throw new HttpsError(
+          'unavailable',
+          expiredToken
+            ? 'The Facebook Page access token expired or was revoked. Update FACEBOOK_PAGE_ACCESS_TOKEN in Firebase Secret Manager. The last cached feed is still available.'
+            : `Facebook could not refresh the feed${graphError?.message ? `: ${graphError.message}` : ` (HTTP ${response.status})`}. The last cached feed is still available.`
+        );
+      }
+      if (!result || typeof result !== 'object' || !('data' in result) || !Array.isArray(result.data)) {
+        throw new HttpsError('unavailable', 'Facebook returned an invalid feed response. The last cached feed is still available.');
+      }
+
+      const posts = result.data.flatMap((entry): FacebookPost[] => {
+        if (!entry || typeof entry !== 'object') return [];
+        const post = entry as Record<string, unknown>;
+        if (typeof post.id !== 'string' || typeof post.permalink_url !== 'string') return [];
+        return [{
+          id: post.id,
+          message: typeof post.message === 'string' ? post.message.slice(0, 5000) : '',
+          permalinkUrl: post.permalink_url,
+          createdAt: typeof post.created_time === 'string' ? post.created_time : new Date().toISOString(),
+          ...(typeof post.full_picture === 'string' ? { imageUrl: post.full_picture } : {}),
+        }];
+      }).slice(0, 10);
+      const feed = { posts, syncedAt: new Date().toISOString() };
+      await db.doc(FACEBOOK_FEED_CACHE_PATH.join('/')).set(feed);
+      return feed;
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      console.error('Facebook feed sync failed.', error);
+      throw new HttpsError(
+        'unavailable',
+        'Facebook feed sync failed. Check the Page ID, access token, and network connection. The last cached feed is still available.'
+      );
+    }
+  }
+);
 
 const siteOriginForRequest = (request: { get: (name: string) => string | undefined; hostname: string }) => {
   const forwardedHost = request.get('x-forwarded-host')?.split(',')[0].trim();

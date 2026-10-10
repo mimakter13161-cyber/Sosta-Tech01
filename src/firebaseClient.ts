@@ -26,7 +26,7 @@ import {
 } from 'firebase/firestore';
 import { FirebaseStorage, getBlob, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { Functions, getFunctions, httpsCallable } from 'firebase/functions';
-import { AdminRole, AdminUser, HappyCustomer, Product, SiteSettings } from './types';
+import { AdminRole, AdminUser, FacebookFeed, HappyCustomer, Product, SiteSettings } from './types';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -154,6 +154,18 @@ export const readSiteSettings = async () => {
   if (!firebaseDb) return null;
   const snapshot = await getDocFromServer(doc(firebaseDb, 'siteSettings', 'public'));
   return snapshot.exists() ? snapshot.data() as SiteSettings : null;
+};
+
+export const readFacebookFeed = async (): Promise<FacebookFeed> => {
+  if (!firebaseFunctions) throw new Error('Firebase Functions are not configured.');
+  const getFeed = httpsCallable<void, FacebookFeed>(firebaseFunctions, 'getFacebookFeed');
+  return (await getFeed()).data;
+};
+
+export const syncFacebookFeed = async (): Promise<FacebookFeed> => {
+  if (!firebaseFunctions) throw new Error('Firebase Functions are not configured.');
+  const syncFeed = httpsCallable<void, FacebookFeed>(firebaseFunctions, 'syncFacebookFeed');
+  return (await syncFeed()).data;
 };
 
 export const persistHappyCustomers = async (customers: HappyCustomer[]) => {

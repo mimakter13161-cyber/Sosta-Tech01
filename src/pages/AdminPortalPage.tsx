@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AdminUser, HappyCustomer, Product, ProductImage, ProductVariant, SiteSettings, TechnicalSpecs, WhatsAppLead } from '../types';
+import { AdminUser, FacebookFeed, HappyCustomer, Product, ProductImage, ProductVariant, SiteSettings, TechnicalSpecs, WhatsAppLead } from '../types';
 import { useSiteSettings } from '../components/SiteSettingsContext';
 import { ImageUploadField } from '../components/ImageUploadField';
 import { downloadImageAsDataUrl, isFirebaseConfigured } from '../firebaseClient';
@@ -190,6 +190,8 @@ interface AdminPortalPageProps {
   onDeleteProduct: (id: string) => void;
   onSelectProduct: (productId: string) => void;
   onBackToStorefront: () => void;
+  facebookFeedSyncedAt: string | null;
+  onSyncFacebookFeed: () => Promise<FacebookFeed>;
   onToast: (msg: string) => void;
 }
 
@@ -217,6 +219,8 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
   onDeleteProduct,
   onSelectProduct,
   onBackToStorefront,
+  facebookFeedSyncedAt,
+  onSyncFacebookFeed,
   onToast,
 }) => {
   // Navigation inside admin
@@ -228,6 +232,8 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSyncingFacebookFeed, setIsSyncingFacebookFeed] = useState(false);
+  const [facebookFeedSyncMessage, setFacebookFeedSyncMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [managerEmail, setManagerEmail] = useState('');
   const [managerInitialPassword, setManagerInitialPassword] = useState('');
@@ -1003,6 +1009,27 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
             {activeAdminNav === 'inventory' && (
             <div className="flex items-center gap-3 self-start lg:self-center">
               <button
+                type="button"
+                disabled={isSyncingFacebookFeed}
+                onClick={() => {
+                  setIsSyncingFacebookFeed(true);
+                  setFacebookFeedSyncMessage('');
+                  void onSyncFacebookFeed().then((feed) => {
+                    setFacebookFeedSyncMessage(`Synced ${feed.posts.length} Facebook posts successfully.`);
+                  }).catch((error) => {
+                    setFacebookFeedSyncMessage(
+                      error instanceof Error ? error.message : 'Facebook feed sync failed. The last saved feed remains available.'
+                    );
+                  }).finally(() => setIsSyncingFacebookFeed(false));
+                }}
+                className="px-4 py-2.5 rounded-lg bg-[#e5eeff] hover:bg-[#dce9ff] text-[#004ac6] text-[13px] font-semibold transition-all flex items-center gap-2 border border-[#c3d7ff] disabled:cursor-wait disabled:opacity-60"
+              >
+                <span className={`material-symbols-outlined text-[18px] ${isSyncingFacebookFeed ? 'animate-spin' : ''}`}>
+                  {isSyncingFacebookFeed ? 'refresh' : 'sync'}
+                </span>
+                <span>{isSyncingFacebookFeed ? 'Syncing Facebook…' : 'Sync Facebook Feed'}</span>
+              </button>
+              <button
                 onClick={handleExportCSV}
                 className="px-4 py-2.5 rounded-lg bg-[#eff4ff] hover:bg-[#e5eeff] text-[#0b1c30] text-[13px] font-semibold transition-all flex items-center gap-2 border border-[#e2e8f0] cursor-pointer"
               >
@@ -1017,6 +1044,16 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
                 <span>+ Add New Phone</span>
               </button>
             </div>
+            )}
+            {facebookFeedSyncMessage && (
+              <p role="status" className={`text-[12px] ${facebookFeedSyncMessage.startsWith('Synced ') ? 'text-[#006242]' : 'text-[#ba1a1a]'}`}>
+                {facebookFeedSyncMessage}
+              </p>
+            )}
+            {activeAdminNav === 'inventory' && facebookFeedSyncedAt && (
+              <p className="text-[11px] text-[#565e74]">
+                Last successful Facebook sync: {new Date(facebookFeedSyncedAt).toLocaleString()}
+              </p>
             )}
           </div>
 

@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { DEFAULT_SITE_SETTINGS, INITIAL_PRODUCTS, INITIAL_LEADS, REVIEWS } from './data/mockData';
-import { Product, AdminUser, CartItem, HappyCustomer, ProductVariant, WhatsAppLead, SiteSettings, LiveEditMap } from './types';
+import { Product, AdminUser, CartItem, FacebookFeed, HappyCustomer, ProductVariant, WhatsAppLead, SiteSettings, LiveEditMap } from './types';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
@@ -31,8 +31,10 @@ import {
   readSiteSettings,
   removeFirebaseManager,
   resetFirebaseManagerPassword,
+  readFacebookFeed,
   signInAdmin,
   signOutAdmin,
+  syncFacebookFeed,
   subscribeToFirebaseAuth,
 } from './firebaseClient';
 
@@ -160,6 +162,26 @@ const loadHappyCustomers = (): HappyCustomer[] => {
   }
 };
 
+const FACEBOOK_FEED_STORAGE_KEY = 'sosta-facebook-feed-v1';
+
+const loadCachedFacebookFeed = (): FacebookFeed => {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(FACEBOOK_FEED_STORAGE_KEY) || '{}');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { posts: [], syncedAt: null };
+    const value = parsed as Partial<FacebookFeed>;
+    return {
+      posts: Array.isArray(value.posts)
+        ? value.posts.filter((post) => Boolean(post && typeof post.id === 'string' &&
+          typeof post.message === 'string' && typeof post.permalinkUrl === 'string' &&
+          typeof post.createdAt === 'string')).slice(0, 10)
+        : [],
+      syncedAt: typeof value.syncedAt === 'string' ? value.syncedAt : null,
+    };
+  } catch {
+    return { posts: [], syncedAt: null };
+  }
+};
+
 export default function App() {
   const [products, setProducts] = useState<Product[]>(() => {
     try {
@@ -184,6 +206,7 @@ export default function App() {
   const [leads, setLeads] = useState<WhatsAppLead[]>(INITIAL_LEADS);
   const [happyCustomers, setHappyCustomers] = useState<HappyCustomer[]>(loadHappyCustomers);
   const [savedHappyCustomers, setSavedHappyCustomers] = useState<HappyCustomer[]>(loadHappyCustomers);
+  const [facebookFeed, setFacebookFeed] = useState<FacebookFeed>(loadCachedFacebookFeed);
   const [localFallbackUsers, setLocalFallbackUsers] = useState<AdminUser[]>(loadAdminUsers);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>(() => isFirebaseConfigured ? [] : loadAdminUsers());
   const [authBackend, setAuthBackend] = useState<'firebase' | 'local'>(() =>
@@ -253,6 +276,32 @@ export default function App() {
     setTimeout(() => {
       setToastMessage(null);
     }, 3500);
+  };
+
+  const cacheFacebookFeed = (feed: FacebookFeed) => {
+    setFacebookFeed(feed);
+    try {
+      window.localStorage.setItem(FACEBOOK_FEED_STORAGE_KEY, JSON.stringify(feed));
+    } catch (error) {
+      console.warn('Facebook feed is available for this session but could not be cached in this browser.', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!isFirebaseConfigured) return;
+    let cancelled = false;
+    void readFacebookFeed().then((feed) => {
+      if (!cancelled && feed.posts.length) cacheFacebookFeed(feed);
+    }).catch((error) => {
+      console.warn('Could not refresh the cached Facebook feed. Keeping the browser cache or embedded Facebook fallback.', error);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSyncFacebookFeed = async () => {
+    const feed = await syncFacebookFeed();
+    cacheFacebookFeed(feed);
+    return feed;
   };
 
   const commitNavigation = (request: NavigationRequest) => {
@@ -1279,6 +1328,7 @@ export default function App() {
                   }))
                 : REVIEWS}
               happyCustomers={happyCustomers}
+              facebookFeed={facebookFeed}
               onSelectProduct={handleSelectProduct}
               onNavigateCatalog={(cat) => {
                 if (cat === 'Android') {
@@ -1408,6 +1458,8 @@ export default function App() {
             onBackToStorefront={() => {
               navigateHome();
             }}
+            facebookFeedSyncedAt={facebookFeed.syncedAt}
+            onSyncFacebookFeed={handleSyncFacebookFeed}
             onToast={showToast}
           />
         ) : (
