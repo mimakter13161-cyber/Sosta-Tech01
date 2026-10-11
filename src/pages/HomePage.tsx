@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FacebookFeed, HappyCustomer, Product, Review } from '../types';
 import { STORE_MAP_IMAGE } from '../data/mockData';
 import { useSiteSettings } from '../components/SiteSettingsContext';
@@ -29,6 +29,53 @@ export const HomePage: React.FC<HomePageProps> = ({
   const settings = useSiteSettings();
   const [activeHeroBanner, setActiveHeroBanner] = useState(0);
   const [visibleHomeProductCount, setVisibleHomeProductCount] = useState(10);
+  const heroSlides = useMemo(() => {
+    const iphone = products.find((product) => product.id === 'iphone-16-pro-max')
+      || products.find((product) => product.brand === 'Apple' && /16 Pro/i.test(product.model));
+    const android = products.find((product) => product.brand === 'Samsung' && /S24 Ultra/i.test(product.model))
+      || products.find((product) => product.brand === 'Samsung');
+    const refurbished = products.find((product) => product.condition !== 'Brand New');
+    const candidates = [
+      {
+        product: iphone,
+        eyebrow: 'Latest iPhone',
+        title: settings.heroTitle,
+        subtitle: settings.heroSubtitle,
+        description: settings.heroDescription,
+        fallbackTitle: 'iPhone 16 Pro & Pro Max',
+      },
+      {
+        product: android,
+        eyebrow: 'Android flagship',
+        title: 'Samsung Galaxy S24 Ultra',
+        subtitle: 'Galaxy AI. Titanium strength. Flagship performance.',
+        description: 'Explore Samsung’s S Pen flagship with a vivid display, versatile cameras, and verified stock at Sosta Tech.',
+        fallbackTitle: 'Samsung Galaxy S24 Ultra',
+      },
+      {
+        product: refurbished,
+        eyebrow: 'Certified refurbished deals',
+        title: 'Refurbished Deals',
+        subtitle: 'Premium iPhones, smarter prices.',
+        description: 'Shop inspected pre-owned devices with transparent condition details and battery health information.',
+        fallbackTitle: 'Refurbished Deals',
+      },
+    ];
+    return candidates.flatMap((candidate, index) => {
+      if (!candidate.product) return [];
+      const productImage = candidate.product.imageUrl
+        || candidate.product.gallery.find((image) => image.isPrimary)?.src
+        || candidate.product.gallery[0]?.src
+        || '';
+      return [{
+        ...candidate,
+        title: candidate.title || candidate.fallbackTitle,
+        image: settings.heroBanners[index] || productImage,
+      }];
+    });
+  }, [products, settings.heroBanners, settings.heroDescription, settings.heroSubtitle, settings.heroTitle]);
+  const activeHeroSlide = heroSlides[activeHeroBanner % Math.max(heroSlides.length, 1)];
+  const activeHeroProduct = activeHeroSlide?.product;
   const homeProducts = useMemo(() => {
     const selectedProducts = products.filter((product) => product.showOnHomePage ?? product.featured);
     const selectedProductIds = new Set(selectedProducts.map((product) => product.id));
@@ -38,6 +85,14 @@ export const HomePage: React.FC<HomePageProps> = ({
   const latestHappyCustomers = [...happyCustomers]
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, 6);
+
+  useEffect(() => {
+    if (heroSlides.length < 2) return undefined;
+    const interval = window.setInterval(() => {
+      setActiveHeroBanner((current) => (current + 1) % heroSlides.length);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [heroSlides.length]);
 
   return (
     <div className="flex flex-col w-full">
@@ -51,36 +106,44 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div className="inline-flex items-center gap-2 self-start px-3.5 py-1.5 rounded-full bg-[#dce9ff] text-[#0b1c30]">
                 <span className="inline-block w-2 h-2 rounded-full bg-[#006242] animate-pulse"></span>
                 <span className="text-[11px] uppercase tracking-wider text-[#004ac6] font-bold">
-                  {settings.tagline}
+                  {activeHeroSlide?.eyebrow || settings.tagline}
                 </span>
               </div>
               <div className="space-y-3">
                 <h1 className="text-[44px] sm:text-[56px] font-bold text-[#0b1c30] tracking-tight leading-none">
-                  {settings.heroTitle}
+                  {activeHeroSlide?.title || settings.heroTitle}
                 </h1>
                 <p className="text-[22px] sm:text-[24px] text-[#434655] font-medium">
-                  {settings.heroSubtitle}
+                  {activeHeroSlide?.subtitle || settings.heroSubtitle}
                 </p>
               </div>
               <p className="text-[17px] text-[#565e74] max-w-xl leading-relaxed">
-                {settings.heroDescription}
+                {activeHeroSlide?.description || settings.heroDescription}
               </p>
               <div className="flex flex-wrap items-baseline gap-3 pt-2">
                 <span className="text-[13px] uppercase tracking-wider text-[#434655]">
                   Starting from
                 </span>
-                <span className="text-[32px] font-bold text-[#004ac6] tracking-tight">৳152,000</span>
-                <span className="text-[16px] text-[#737686] line-through">৳165,000</span>
-                <span className="px-2 py-0.5 rounded bg-[#bdffdb] text-[#002113] text-[11px] font-bold">
-                  Save ৳13,000
+                <span className="text-[32px] font-bold text-[#004ac6] tracking-tight">
+                  ৳{(activeHeroProduct?.basePrice ?? 152000).toLocaleString('en-IN')}
                 </span>
+                {activeHeroProduct && activeHeroProduct.originalPrice > activeHeroProduct.basePrice && (
+                  <>
+                    <span className="text-[16px] text-[#737686] line-through">
+                      ৳{activeHeroProduct.originalPrice.toLocaleString('en-IN')}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-[#bdffdb] text-[#002113] text-[11px] font-bold">
+                      Save ৳{(activeHeroProduct.originalPrice - activeHeroProduct.basePrice).toLocaleString('en-IN')}
+                    </span>
+                  </>
+                )}
               </div>
 
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-4">
                 <a
                   className="flex items-center justify-center gap-3 px-6 py-4 rounded-xl bg-[#007d55] hover:bg-[#006242] text-white text-[14px] font-semibold shadow-md hover:opacity-95 transition-all"
-                  href={`https://wa.me/${settings.whatsAppNumber}?text=${encodeURIComponent(`Hello ${settings.brandName}, I am inquiring about flagship availability in Rajshahi.`)}`}
+                  href={`https://wa.me/${settings.whatsAppNumber}?text=${encodeURIComponent(`Hello ${settings.brandName}, I am interested in the ${activeHeroProduct?.model || 'featured flagship'} in Rajshahi.`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -88,13 +151,13 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <span>Inquire via WhatsApp</span>
                 </a>
                 <button
-                  onClick={() => onSelectProduct('iphone-16-pro-max')}
+                  onClick={() => activeHeroProduct && onSelectProduct(activeHeroProduct.id)}
                   className="flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-[#dce9ff] text-[#0b1c30] text-[14px] font-semibold hover:bg-[#d3e4fe] transition-colors shadow-sm cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[20px] text-[#004ac6]">
                     storefront
                   </span>
-                  <span>Check Stock at Theme Omar Plaza</span>
+                  <span>{activeHeroProduct ? `View ${activeHeroProduct.model}` : 'Browse Products'}</span>
                 </button>
                 <a
                   href={settings.facebookPageUrl}
@@ -127,7 +190,15 @@ export const HomePage: React.FC<HomePageProps> = ({
             {/* Hero Visual Showcase (6 Cols) */}
             <div className="lg:col-span-6 relative flex flex-col justify-center items-center">
               <div
-                onClick={() => onSelectProduct('iphone-16-pro-max')}
+                onClick={() => activeHeroProduct && onSelectProduct(activeHeroProduct.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    if (activeHeroProduct) onSelectProduct(activeHeroProduct.id);
+                  }
+                }}
                 className="relative w-full aspect-square max-w-[540px] rounded-3xl bg-[#eff4ff] overflow-hidden shadow-xl p-8 flex items-center justify-center cursor-pointer group"
               >
                 <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-[#dbe1ff] filter blur-3xl opacity-30"></div>
@@ -137,34 +208,34 @@ export const HomePage: React.FC<HomePageProps> = ({
                   height={1000}
                   fetchPriority="high"
                   className="relative z-10 w-full h-full object-contain drop-shadow-2xl transition-transform duration-500 group-hover:scale-105"
-                  alt={`${settings.brandName} featured product banner`}
-                  src={settings.heroBanners[activeHeroBanner] || ''}
+                  alt={activeHeroProduct?.model || `${settings.brandName} featured product banner`}
+                  src={activeHeroSlide?.image || '/favicon.svg'}
                 />
                 {/* Floating Spec Token */}
                 <div className="absolute top-6 right-6 z-20 px-3.5 py-2 rounded-xl bg-white/90 backdrop-blur-md shadow-md flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#006242]"></span>
                   <span className="text-[11px] text-[#0b1c30] font-bold tracking-tight">
-                    Grade A+ Fresh Import
+                    {activeHeroProduct?.condition === 'Brand New' ? 'Brand New · Verified Stock' : activeHeroProduct?.condition || 'Verified Stock'}
                   </span>
                 </div>
                 <div className="absolute bottom-6 left-6 z-20 px-4 py-2.5 rounded-xl bg-white/95 backdrop-blur-md shadow-md flex items-center gap-3">
                   <span className="material-symbols-outlined text-[#004ac6] text-[22px]">memory</span>
                   <div>
-                    <p className="text-[11px] text-[#434655] uppercase tracking-wider">Processor</p>
-                    <p className="text-[13px] text-[#0b1c30] font-bold">Apple A18 Pro Bionic</p>
+                    <p className="text-[11px] text-[#434655] uppercase tracking-wider">Featured model</p>
+                    <p className="text-[13px] text-[#0b1c30] font-bold">{activeHeroProduct?.model || settings.brandName}</p>
                   </div>
                 </div>
               </div>
-              {settings.heroBanners.length > 1 && (
+              {heroSlides.length > 1 && (
                 <div className="flex items-center gap-2 mt-3" aria-label="Hero banners">
-                  {settings.heroBanners.map((banner, index) => (
+                  {heroSlides.map((slide, index) => (
                     <button
-                      key={`${banner}-${index}`}
+                      key={`${slide.eyebrow}-${index}`}
                       type="button"
-                      aria-label={`Show hero banner ${index + 1}`}
-                      aria-pressed={activeHeroBanner === index}
+                      aria-label={`Show ${slide.eyebrow} slide`}
+                      aria-pressed={activeHeroBanner % heroSlides.length === index}
                       onClick={() => setActiveHeroBanner(index)}
-                      className={`h-2.5 rounded-full transition-all ${activeHeroBanner === index ? 'w-8 bg-[#004ac6]' : 'w-2.5 bg-[#c3c6d7]'}`}
+                      className={`h-2.5 rounded-full transition-all ${activeHeroBanner % heroSlides.length === index ? 'w-8 bg-[#004ac6]' : 'w-2.5 bg-[#c3c6d7]'}`}
                     />
                   ))}
                 </div>
@@ -309,7 +380,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             </button>
 
             <button
-              onClick={() => onNavigateStore()}
+              onClick={() => onNavigateCatalog('Accessories')}
               className="group p-5 rounded-2xl bg-white shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between h-44 text-left border border-[#e2e8f0]/60 cursor-pointer"
             >
               <div className="w-10 h-10 rounded-xl bg-[#eff4ff] flex items-center justify-center text-[#565e74] group-hover:bg-[#0b1c30] group-hover:text-white transition-colors">
@@ -317,7 +388,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
               <div>
                 <h3 className="text-[16px] text-[#0b1c30] font-bold group-hover:text-[#0b1c30] transition-colors">
-                  Official Gear
+                  Accessories
                 </h3>
                 <p className="text-[11px] text-[#434655] mt-1 font-medium">Chargers, MagSafe, Buds</p>
               </div>
@@ -735,9 +806,9 @@ export const HomePage: React.FC<HomePageProps> = ({
             </a>
           </div>
           {facebookFeed.posts.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="mx-auto flex max-w-[1200px] flex-wrap justify-center gap-4">
               {facebookFeed.posts.map((post) => (
-                <article key={post.id} className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-xs">
+                <article key={post.id} className="w-full max-w-[380px] overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-xs">
                   {post.imageUrl && (
                     <a href={post.permalinkUrl} target="_blank" rel="noopener noreferrer" aria-label="Open Facebook post">
                       <img
@@ -769,7 +840,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             <p className="mb-3 rounded-lg bg-[#eff4ff] px-4 py-3 text-[12px] leading-relaxed text-[#565e74]">
               Showing the live Facebook Page timeline. If Facebook does not load here, open the page directly using the link above.
             </p>
-          <div className="overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f8f9ff]">
+          <div className="mx-auto max-w-[720px] overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f8f9ff]">
             <iframe
               title="Latest posts and offers from Sosta Tech on Facebook"
               src={`https://www.facebook.com/plugins/page.php?href=${encodeURIComponent(settings.facebookPageUrl)}&tabs=timeline&width=500&height=620&small_header=false&adapt_container_width=true&hide_cover=false&show_facepile=true`}

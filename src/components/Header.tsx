@@ -38,6 +38,10 @@ export const Header: React.FC<HeaderProps> = ({
               alt={`${brandName} logo`}
               className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
               src={logoUrl}
+              onError={(event) => {
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = '/favicon.svg';
+              }}
             />
             <div className="flex flex-col">
               <span className="font-semibold text-[20px] text-[#0b1c30] tracking-tight leading-none">
@@ -84,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
                 : 'text-[#434655] hover:text-[#0b1c30] hover:bg-[#eff4ff]'
             }`}
           >
-            iPhones
+            All Products
           </button>
           <button
             onClick={() => setActiveTab('android')}
@@ -208,7 +212,7 @@ export const Header: React.FC<HeaderProps> = ({
             }}
             className="text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#eff4ff]"
           >
-            iPhones Catalog
+            All Products Catalog
           </button>
           <button
             onClick={() => {

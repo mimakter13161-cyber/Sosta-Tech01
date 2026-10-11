@@ -2,7 +2,7 @@ import { Product, WhatsAppLead, Review, SiteSettings } from '../types';
 
 export const STORE_PHONE = '01768695587';
 export const STORE_LOCATION_TEXT = '5th Floor, Theme Omar Plaza, New Market, Rajshahi, Bangladesh';
-export const BRAND_LOGO_URL = 'https://lh3.googleusercontent.com/aida/AEtjO1VWsrnlrIHrsy7RKeNjq9uVEUj2FCM8RyDg0sQ9b5TEoAlz1kgYTMd1-QfZo4ZOzLfpmo1sRCJyRddAMNsa6216T3WQSU18ioFKnW6IU3-tPkJalLAMMGPFKyiNQkTpDEqdk-2-PPTolF1cFX5i5wCOGXxYuSjzGXNFUtwOZ5_rtXl_o1wFxPqB9T0gjXYyWTXUYaFlUzpLs4CVb8HFUxaWbsFxodTfdCGXwycZ_aQO33lA3MCWHu6UzAE';
+export const BRAND_LOGO_URL = '/favicon.svg';
 export const STORE_MAP_IMAGE = 'https://lh3.googleusercontent.com/aida-public/AB6AXuBs8gQheKkkTISEBXvxsGTUAv15vISs1_zr1VK7qwswRYVWCUSB1_6n5-ZJsN5TCXkykWtStpic0Q6HPp7KgVjI3KVKMLCXqHsJMXEYu4xuHHBxINDRqJUKg_mv0QNDx4rj9-jXcpySs96xgN8qyQz2RsNBPAWFyzv0ZSGg3J6OfyFqKFKgccVPcTxAeEd14wLlIjO-IsI3tJMtAc9J5AfO0PLepTjujU0uREH0BeOQVqviK2xVnt85';
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {

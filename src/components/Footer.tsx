@@ -22,6 +22,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                 alt={`${settings.brandName} logo`}
                 className="h-7 w-auto object-contain"
                 src={settings.logoUrl}
+                onError={(event) => {
+                  event.currentTarget.onerror = null;
+                  event.currentTarget.src = '/favicon.svg';
+                }}
               />
               <span className="font-semibold text-[20px] text-[#0b1c30]">{settings.brandName}</span>
             </div>
@@ -140,9 +144,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         </div>
 
         {/* Bottom bar */}
-        <div className="mt-12 pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-[13px] text-[#434655] border-t border-[#eff4ff]">
-          <p>{settings.footerCopyright}</p>
-          <div className="flex items-center gap-6 font-medium">
+        <div className="relative mt-12 grid grid-cols-1 justify-items-center gap-4 border-t border-[#eff4ff] pt-8 text-center text-[13px] text-[#434655] md:grid-cols-[1fr_auto_1fr]">
+          <p className="text-center md:col-start-2 md:row-start-1">{settings.footerCopyright}</p>
+          <div className="flex flex-wrap items-center justify-center gap-6 font-medium md:col-start-3 md:row-start-1 md:justify-self-end">
             <button
               onClick={() => onNavigate('store-location')}
               className="hover:text-[#0b1c30] transition-colors"

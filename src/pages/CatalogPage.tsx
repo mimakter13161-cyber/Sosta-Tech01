@@ -42,7 +42,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedBatteryTier, setSelectedBatteryTier] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('Latest Arrivals');
-  const facetProducts = brandFilter === 'all' ? products : products.filter((product) => product.brand === brandFilter);
+  const facetProducts = products;
   const availableSeries = Array.from(new Set(facetProducts.map((product) => product.series).filter(Boolean)))
     .sort((left, right) => left.localeCompare(right));
   const availableBrands = Array.from(new Set(facetProducts.map((product) => product.brand).filter(Boolean)))
@@ -90,6 +90,13 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
     );
   };
 
+  const selectCatalogView = (view: 'all' | 'iPhones' | 'Android' | 'Accessories') => {
+    setSelectedBrand(view === 'iPhones' ? 'Apple' : view === 'Android' ? 'Samsung' : 'all');
+    setSelectedCategory(view === 'Accessories' ? 'Accessories' : 'all');
+    setSelectedSeries([]);
+    onCategoryChange?.(view === 'Accessories' ? 'Accessories' : '');
+  };
+
   const handleResetFilters = () => {
     setInStockOnly(false);
     setPreOrder(false);
@@ -110,11 +117,10 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
   // Filter computation
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
-      if (brandFilter === 'Apple' && p.brand !== 'Apple') return false;
-      if (brandFilter === 'Samsung' && p.brand !== 'Samsung') return false;
       if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
+      if (selectedCategory === 'Accessories' && !/\b(accessor(?:y|ies)|charger|case|cable|airpods|buds|watch)\b/i.test(`${p.title} ${p.model} ${p.series}`)) return false;
       if (selectedCategory === 'Pre-Owned' && !p.condition.includes('Pre-Owned')) return false;
-      if (selectedCategory !== 'all' && selectedCategory !== 'Pre-Owned' && p.series !== selectedCategory) return false;
+      if (selectedCategory !== 'all' && selectedCategory !== 'Pre-Owned' && selectedCategory !== 'Accessories' && p.series !== selectedCategory) return false;
 
       const price = Number.isFinite(p.basePrice) ? p.basePrice : 0;
       if (price < minPrice || price > maxPrice) return false;
@@ -182,7 +188,11 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                 chevron_right
               </span>
               <span className="hover:text-[#004ac6] cursor-pointer">
-                {brandFilter === 'Samsung' ? 'Android Flagships' : 'iPhones'}
+                {brandFilter === 'Samsung'
+                  ? 'Android Flagships'
+                  : brandFilter === 'Apple'
+                    ? 'iPhones'
+                    : 'All Products'}
               </span>
               <span className="material-symbols-outlined text-[16px] text-[#c3c6d7]">
                 chevron_right
@@ -192,7 +202,9 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
             <h1 className="text-[32px] sm:text-[36px] font-bold text-[#0b1c30] tracking-tight">
               {brandFilter === 'Samsung'
                 ? 'Authentic Android Flagships'
-                : 'Authentic iPhone Flagships'}
+                : brandFilter === 'Apple'
+                  ? 'Authentic iPhone Flagships'
+                  : 'All Products'}
             </h1>
             <p className="text-[15px] text-[#434655] max-w-2xl">
               Browse verified brand new and certified pre-owned flagships in Rajshahi with complete warranty. Physical unit inspect-before-pay at Theme Omar Plaza.
@@ -226,6 +238,37 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
 
       {/* Main Catalog View Grid */}
       <div className="max-w-[1440px] mx-auto px-6 lg:px-12 py-10 w-full">
+        <nav aria-label="Product categories" className="mb-8 flex flex-wrap items-center justify-center gap-2">
+          {([
+            ['all', 'All Products'],
+            ['iPhones', 'iPhones'],
+            ['Android', 'Android'],
+            ['Accessories', 'Accessories'],
+          ] as const).map(([view, label]) => {
+            const isActive = view === 'all'
+              ? selectedBrand === 'all' && selectedCategory === 'all'
+              : view === 'iPhones'
+                ? selectedBrand === 'Apple' && selectedCategory === 'all'
+                : view === 'Android'
+                  ? selectedBrand === 'Samsung' && selectedCategory === 'all'
+                  : selectedCategory === 'Accessories';
+            return (
+              <button
+                key={view}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => selectCatalogView(view)}
+                className={`rounded-full px-5 py-2.5 text-[13px] font-semibold transition-colors ${
+                  isActive
+                    ? 'bg-[#004ac6] text-white'
+                    : 'border border-[#e2e8f0] bg-white text-[#434655] hover:bg-[#e5eeff] hover:text-[#004ac6]'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </nav>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Dynamic Sidebar Filters */}
           <aside className="lg:col-span-3 space-y-6">
@@ -541,7 +584,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
             </div>
 
             {/* Product Cards Grid (6 High Fidelity Cards) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {filteredProducts.map((phone) => (
                 <div
                   key={phone.id}
@@ -673,8 +716,14 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
             </div>
             {filteredProducts.length === 0 && (
               <div className="rounded-2xl border border-[#e2e8f0] bg-white p-10 text-center">
-                <h2 className="text-[20px] font-bold text-[#0b1c30]">No matching products</h2>
-                <p className="mt-2 text-[14px] text-[#565e74]">Try changing your search or clearing one or more filters.</p>
+                <h2 className="text-[20px] font-bold text-[#0b1c30]">
+                  {selectedCategory === 'Accessories' ? 'No accessories listed yet' : 'No matching products'}
+                </h2>
+                <p className="mt-2 text-[14px] text-[#565e74]">
+                  {selectedCategory === 'Accessories'
+                    ? 'Check back soon for available accessories, or browse our current smartphone stock.'
+                    : 'Try changing your search or clearing one or more filters.'}
+                </p>
                 <button
                   type="button"
                   onClick={() => {
@@ -691,10 +740,9 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
             <div className="bg-white p-5 rounded-2xl shadow-xs border border-[#e2e8f0] flex flex-col sm:flex-row items-center justify-between gap-4">
               <span className="text-[13px] text-[#434655]">
                 Showing <strong className="text-[#0b1c30]">{filteredProducts.length}</strong> of{' '}
-                <strong className="text-[#0b1c30]">{products.filter((product) => {
-                  if (brandFilter !== 'all' && product.brand !== brandFilter) return false;
-                  return selectedBrand === 'all' || product.brand === selectedBrand;
-                }).length}</strong> authentic flagships
+                <strong className="text-[#0b1c30]">{products.filter((product) =>
+                  selectedBrand === 'all' || product.brand === selectedBrand
+                ).length}</strong> authentic devices
               </span>
             </div>
           </section>
