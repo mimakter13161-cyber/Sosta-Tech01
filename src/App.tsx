@@ -101,19 +101,6 @@ const loadAdminUsers = (): AdminUser[] => {
   }
 };
 
-const getOrCreateDemoOwner = async (): Promise<AdminUser> => {
-  const email = 'admin@sostatech.bd';
-  const password = 'Owner@010101';
-  const existing = loadAdminUsers().find((user) => user.email === email);
-  if (existing) {
-    if (!(await verifyAdminPassword(existing, password))) {
-      throw new Error('Email or password is incorrect.');
-    }
-    return existing;
-  }
-  return createAdminUser(email, password, 'owner');
-};
-
 const readAdminSessionId = () => {
   if (import.meta.env.DEV) {
     const localDemoSession = window.localStorage.getItem('sosta_admin_session');
@@ -125,11 +112,6 @@ const readAdminSessionId = () => {
 
 const hasLocalDemoSession = () =>
   import.meta.env.DEV && Boolean(window.localStorage.getItem('sosta_admin_session'));
-
-const isFirebaseUnavailable = (error: unknown) =>
-  Boolean(error && typeof error === 'object' && 'code' in error &&
-    ['unavailable', 'auth/network-request-failed', 'auth/internal-error', 'auth/invalid-credential', 'auth/user-not-found'].includes(String(error.code))) ||
-  Boolean(error instanceof Error && error.message.includes('has no admin role assigned'));
 
 const sortHappyCustomers = (customers: HappyCustomer[]) =>
   [...customers].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
@@ -933,22 +915,19 @@ export default function App() {
   };
 
   const handleAdminLogin = async (email: string, password: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (import.meta.env.DEV &&
+        normalizedEmail === 'admin@sostatech.bd' &&
+        password === 'Owner@010101') {
+      const demoOwner = await createAdminUser(normalizedEmail, password, 'owner');
+      setAdminUsers((users) => [...users.filter((user) => user.email !== normalizedEmail), demoOwner]);
+      setLocalFallbackUsers((users) => [...users.filter((user) => user.email !== normalizedEmail), demoOwner]);
+      establishAdminSession(demoOwner, 'local');
+      return;
+    }
+
     if (isFirebaseConfigured) {
-      let user: AdminUser | null;
-      try {
-        user = await signInAdmin(email.trim().toLowerCase(), password);
-      } catch (error) {
-        const demoLoginRequested = import.meta.env.DEV &&
-          email.trim().toLowerCase() === 'admin@sostatech.bd' &&
-          password === 'Owner@010101';
-        if (!demoLoginRequested || !isFirebaseUnavailable(error)) throw error;
-        await signOutAdmin();
-        const demoOwner = await getOrCreateDemoOwner();
-        setAdminUsers((users) => users.some((user) => user.id === demoOwner.id) ? users : [...users, demoOwner]);
-        setLocalFallbackUsers((users) => users.some((user) => user.id === demoOwner.id) ? users : [...users, demoOwner]);
-        establishAdminSession(demoOwner, 'local');
-        return;
-      }
+      const user = await signInAdmin(normalizedEmail, password);
       if (!user) throw new Error('Firebase Authentication is unavailable.');
       establishAdminSession(user, 'firebase');
       const profiles = user.role === 'owner' && !user.mustChangePassword
@@ -957,14 +936,7 @@ export default function App() {
       if (profiles) setAdminUsers(profiles);
       return;
     }
-    const normalizedEmail = email.trim().toLowerCase();
     let user = adminUsers.find((candidate) => candidate.email === normalizedEmail);
-    if (!user && import.meta.env.DEV && normalizedEmail === 'admin@sostatech.bd' && password === 'Owner@010101') {
-      const demoOwner = await getOrCreateDemoOwner();
-      user = demoOwner;
-      setAdminUsers((users) => [...users, demoOwner]);
-      setLocalFallbackUsers((users) => [...users, demoOwner]);
-    }
     if (!user || !(await verifyAdminPassword(user, password))) {
       throw new Error('Email or password is incorrect.');
     }
