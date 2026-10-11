@@ -288,14 +288,6 @@ export const signInAdmin = async (email: string, password: string) => {
   } satisfies AdminUser;
 };
 
-export const readOwnerSetupStatus = async () => {
-  if (!firebaseDb || !firebaseFunctions) throw new Error('Firebase Firestore or Functions are unavailable.');
-  const ownerMarker = await getDocFromServer(doc(firebaseDb, 'settings', 'owner'));
-  const getSetupStatus = httpsCallable<undefined, { needsOwnerSetup: boolean }>(firebaseFunctions, 'getOwnerSetupStatus');
-  const serverStatus = (await getSetupStatus()).data.needsOwnerSetup;
-  return !ownerMarker.exists() && serverStatus;
-};
-
 export const signOutAdmin = async () => {
   if (firebaseAuth) await signOut(firebaseAuth);
 };
