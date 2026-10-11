@@ -184,6 +184,8 @@ interface AdminPortalPageProps {
   activeAdminSection: string;
   onNavigateAdminSection: (section: string) => void;
   onAddManager: (email: string, password: string) => Promise<void>;
+  onApproveManager: (userId: string) => Promise<void>;
+  onRejectManager: (userId: string) => Promise<void>;
   onRemoveManager: (userId: string) => Promise<void> | void;
   onResetManagerPassword: (userId: string, password: string) => Promise<void>;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -213,6 +215,8 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
   activeAdminSection,
   onNavigateAdminSection,
   onAddManager,
+  onApproveManager,
+  onRejectManager,
   onRemoveManager,
   onResetManagerPassword,
   onChangePassword,
@@ -499,6 +503,21 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
       onToast('Store Manager removed.');
     } catch (error) {
       setUserManagementError(error instanceof Error ? error.message : 'Could not remove this manager.');
+    }
+  };
+
+  const handleManagerDecision = async (userId: string, decision: 'approve' | 'reject') => {
+    setUserManagementError('');
+    try {
+      if (decision === 'approve') {
+        await onApproveManager(userId);
+        onToast('Store Manager request approved.');
+      } else {
+        await onRejectManager(userId);
+        onToast('Store Manager request rejected.');
+      }
+    } catch (error) {
+      setUserManagementError(error instanceof Error ? error.message : 'Could not update this manager request.');
     }
   };
 
@@ -1151,9 +1170,29 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
           {activeAdminNav === 'user-management' && isOwner && (
             <section className="bg-white rounded-xl border border-[#e2e8f0] p-6 flex flex-col gap-6">
               <div>
-                <h2 className="text-[20px] font-bold text-[#0b1c30]">Store Manager Accounts</h2>
+                <h2 className="text-[20px] font-bold text-[#0b1c30]">Manage Team / Staff Approvals</h2>
                 <p className="text-[13px] text-[#565e74] mt-1">Managers can manage inventory and view orders, but cannot edit site settings or administer accounts.</p>
               </div>
+              <div className="rounded-lg border border-[#d4d9e5] p-4">
+                <h3 className="mb-3 text-[15px] font-bold text-[#0b1c30]">Pending Store Manager Requests</h3>
+                {users.filter((user) => user.role === 'manager' && user.status === 'pending').length === 0 ? (
+                  <p className="text-[13px] text-[#565e74]">No requests are waiting for approval.</p>
+                ) : (
+                  <ul className="divide-y divide-[#eff4ff]">
+                    {users.filter((user) => user.role === 'manager' && user.status === 'pending').map((user) => (
+                      <li key={user.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                        <span className="font-medium text-[#0b1c30]">{user.email}</span>
+                        <span className="flex gap-2">
+                          <button type="button" onClick={() => void handleManagerDecision(user.id, 'approve')} className="rounded bg-[#e6f6ed] px-3 py-1.5 font-semibold text-[#176b3a]">Approve</button>
+                          <button type="button" onClick={() => void handleManagerDecision(user.id, 'reject')} className="rounded bg-[#fff0ee] px-3 py-1.5 font-semibold text-[#ba1a1a]">Reject</button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {userManagementError && <p role="alert" className="mt-2 text-[12px] text-[#ba1a1a]">{userManagementError}</p>}
+              </div>
+              <h3 className="text-[15px] font-bold text-[#0b1c30]">Store Manager Accounts</h3>
               <form onSubmit={handleAddManager} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
                 <label className="text-[13px] font-semibold text-[#0b1c30]">Username / Email
                   <input required type="email" autoComplete="username" value={managerEmail} onChange={(event) => setManagerEmail(event.target.value)} className="mt-1 w-full h-10 px-3 rounded-lg bg-[#eff4ff] border border-[#e2e8f0] font-normal" />
@@ -1168,10 +1207,10 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
                 <table className="w-full text-left text-[13px]">
                   <thead className="bg-[#eff4ff] text-[#434655]"><tr><th className="p-3 font-semibold">Username / Email</th><th className="p-3 font-semibold">Role</th><th className="p-3 font-semibold text-right">Actions</th></tr></thead>
                   <tbody className="divide-y divide-[#eff4ff]">
-                    {users.filter((user) => user.role === 'manager').map((user) => (
+                    {users.filter((user) => user.role === 'manager' && user.status !== 'pending').map((user) => (
                       <tr key={user.id}>
                         <td className="p-3 font-medium text-[#0b1c30]">{user.email}</td>
-                        <td className="p-3 text-[#565e74]">Store Manager</td>
+                        <td className="p-3 text-[#565e74]">Store Manager{user.status === 'rejected' ? ' (Rejected)' : ''}</td>
                         <td className="p-3">
                           <div className="flex justify-end gap-2">
                             <button onClick={() => { setPasswordTarget({ type: 'manager', userId: user.id }); setPasswordError(''); }} className="px-3 py-1.5 rounded bg-[#eff4ff] text-[#004ac6] font-semibold">Reset Password</button>
@@ -1180,7 +1219,7 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
                         </td>
                       </tr>
                     ))}
-                    {users.every((user) => user.role !== 'manager') && <tr><td colSpan={3} className="p-6 text-center text-[#565e74]">No Store Managers have been added.</td></tr>}
+                    {users.every((user) => user.role !== 'manager' || user.status === 'pending') && <tr><td colSpan={3} className="p-6 text-center text-[#565e74]">No Store Managers have been added.</td></tr>}
                   </tbody>
                 </table>
               </div>

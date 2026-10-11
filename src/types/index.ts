@@ -85,6 +85,7 @@ export interface AdminUser {
   id: string;
   email: string;
   role: AdminRole;
+  status?: 'pending' | 'approved' | 'rejected';
   passwordSalt: string;
   passwordHash: string;
   mustChangePassword?: boolean;

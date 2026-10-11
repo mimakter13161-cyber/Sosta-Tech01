@@ -5,18 +5,30 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function role() {
-      return signedIn()
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
-        : null;
+    function adminProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function passwordIsCurrent(profile) {
+      return !('mustChangePassword' in profile) || profile.mustChangePassword != true;
+    }
+
+    function approvalIsGranted(profile) {
+      return !('status' in profile) || profile.status == 'approved';
     }
 
     function isOwner() {
-      return role() == 'owner';
+      return signedIn()
+        && adminProfile().role == 'owner'
+        && passwordIsCurrent(adminProfile())
+        && approvalIsGranted(adminProfile());
     }
 
     function isManagerOrOwner() {
-      return role() in ['owner', 'manager'];
+      return signedIn()
+        && adminProfile().role in ['owner', 'manager']
+        && passwordIsCurrent(adminProfile())
+        && approvalIsGranted(adminProfile());
     }
 
     match /products/{productId} {

@@ -11,6 +11,24 @@ const db = getFirestore();
 const facebookPageAccessToken = defineSecret('FACEBOOK_PAGE_ACCESS_TOKEN');
 const facebookPageId = defineString('FACEBOOK_PAGE_ID', { default: '' });
 const FACEBOOK_FEED_CACHE_PATH = ['publicContent', 'facebookFeed'] as const;
+const DEFAULT_SITE_CONFIG = {
+  logoUrl: '/favicon.svg',
+  brandName: 'Sosta Tech',
+  contactNumber: '01768695587',
+  whatsAppNumber: '8801768695587',
+  tagline: 'Think Premium. Buy Smart.',
+  heroTitle: 'iPhone 16 Pro & Pro Max',
+  heroSubtitle: 'Titanium Intelligence. Unbeatable Rajshahi Pricing.',
+  heroDescription: 'Experience aerospace-grade titanium, the groundbreaking A18 Pro chip, and Apple Intelligence. Verified authentic boxed and active units available for immediate hands-on testing in Rajshahi.',
+  heroBanners: ['https://lh3.googleusercontent.com/aida-public/AB6AXuBNp0r-JewijI6zI8Sd8QpXBwHtmlJjVEnaBjpOlfGuUwF6-zkfXZ1_-TPWwpqOyM-A9p4h6Ksi-2tiHK6Fjoq_P12VVua0StrsiUeB4WyonS8nwtH4ogARj_5HrrszpXzdAB_iJ_Uul706GX-Sf66RNVPf9aS6WzmOSxXUaA7jHIcaOFsIdZDdfeMW3__Cx5URuPu9wezizlo7IWjw7f-a9R7qOhJxUKej0BVJJO4vV3mZ7dTEL6RV'],
+  facebookPageUrl: 'https://www.facebook.com/sosta.techbd',
+  liveContent: {},
+  footerDescription: 'Sosta Tech is a premier gadget and smartphone shop located at Theme Omar Plaza (5th Floor) in Rajshahi, Bangladesh. We specialize in high-quality refurbished, used, and full-box smartphones and accessories.',
+  footerTrustText: 'Product authenticity, fair pricing, and excellent customer service',
+  footerCopyright: '(c) 2025 Sosta Tech Bangladesh. All rights reserved. Theme Omar Plaza, Rajshahi.',
+  footerLocation: '5th Floor, Theme Omar Plaza, New Market, Rajshahi, Bangladesh',
+  storeHours: 'Saturday - Thursday: 10:00 AM - 9:00 PM\nFriday: 2:00 PM - 9:00 PM (after Jummah)',
+};
 
 interface FacebookPost {
   id: string;
@@ -44,7 +62,10 @@ const readCachedFacebookFeed = async (): Promise<FacebookFeed> => {
 const requireStoreAdmin = async (uid: string | undefined) => {
   if (!uid) throw new HttpsError('unauthenticated', 'Sign in with an admin account to sync the Facebook feed.');
   const profile = await db.collection('users').doc(uid).get();
-  if (!['owner', 'manager'].includes(String(profile.data()?.role || ''))) {
+  const data = profile.data();
+  if (!['owner', 'manager'].includes(String(data?.role || '')) ||
+      data?.status === 'pending' || data?.status === 'rejected' ||
+      data?.mustChangePassword === true) {
     throw new HttpsError('permission-denied', 'Only Sosta Tech administrators can sync the Facebook feed.');
   }
 };
@@ -70,93 +91,49 @@ export const getOwnerSetupStatus = onCall(async () => {
       if (!refreshed.exists) throw error;
     });
   }
-  return { needsOwnerSetup: !ownerMarker.exists && owners.empty && users.empty };
-});
+  if (ownerMarker.exists || !owners.empty || !users.empty) return { needsOwnerSetup: false };
 
-export const initializeOwnerAccount = onCall(async (request) => {
-  const uid = request.auth?.uid;
-  const email = String(request.auth?.token.email || '').trim().toLowerCase();
-  if (!uid || !email) {
-    throw new HttpsError('unauthenticated', 'Create or sign in to a Firebase Authentication account to initialize the Owner.');
-  }
-  const profileRef = db.collection('users').doc(uid);
-  const ownerRef = db.collection('settings').doc('owner');
+  const email = 'admin@sostatech.bd';
   const settingsRef = db.collection('settings').doc('site_config');
-  const submittedSettings = request.data?.siteSettings;
-  if (!submittedSettings || typeof submittedSettings !== 'object' || Array.isArray(submittedSettings)) {
-    throw new HttpsError('invalid-argument', 'Valid initial shop settings are required.');
-  }
-  const settingKeys = [
-    'brandName',
-    'contactNumber',
-    'whatsAppNumber',
-    'tagline',
-    'heroTitle',
-    'heroSubtitle',
-    'heroDescription',
-    'logoUrl',
-    'facebookPageUrl',
-    'footerDescription',
-    'footerTrustText',
-    'footerCopyright',
-    'footerLocation',
-    'storeHours',
-  ] as const;
-  const siteSettings: Record<string, unknown> = Object.fromEntries(settingKeys.map((key) => {
-    const value = (submittedSettings as Record<string, unknown>)[key];
-    if (typeof value !== 'string') {
-      throw new HttpsError('invalid-argument', `Initial shop setting "${key}" is invalid.`);
+  let seededUser;
+  try {
+    seededUser = await auth.createUser({
+      email,
+      password: 'Owner@010101',
+      emailVerified: true,
+      disabled: false,
+    });
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'auth/email-already-exists') {
+      throw new HttpsError('failed-precondition', 'The default Owner email already exists in Firebase Authentication but has no Firestore Owner profile. Remove or reconcile that account before retrying bootstrap.');
     }
-    return [key, value];
-  }));
-  const heroBanners = (submittedSettings as Record<string, unknown>).heroBanners;
-  if (!Array.isArray(heroBanners) || heroBanners.some((banner) => typeof banner !== 'string')) {
-    throw new HttpsError('invalid-argument', 'Initial hero banners are invalid.');
+    throw error;
   }
-  siteSettings.heroBanners = heroBanners.slice(0, 10);
+  const createdAt = new Date().toISOString();
   await db.runTransaction(async (transaction) => {
-    const existingOwner = await transaction.get(ownerRef);
-    const existingProfile = await transaction.get(profileRef);
-    const existingSettings = await transaction.get(settingsRef);
-    if (existingOwner.exists) {
-      if (existingOwner.data()?.uid !== uid) {
-        throw new HttpsError('already-exists', 'The Main Owner account is already initialized.');
-      }
-      if (!existingProfile.exists || existingProfile.data()?.role !== 'owner') {
-        throw new HttpsError('failed-precondition', 'The saved Owner profile is missing or invalid. Contact Firebase support.');
-      }
-      if (!existingSettings.exists) transaction.create(settingsRef, siteSettings);
-      return;
+    const [existingOwner, existingUsers, existingSettings] = await Promise.all([
+      transaction.get(ownerRef),
+      transaction.get(usersCollection.limit(1)),
+      transaction.get(settingsRef),
+    ]);
+    if (existingOwner.exists || !existingUsers.empty) {
+      throw new HttpsError('already-exists', 'An admin account was created while initializing the default Owner. Contact Firebase support.');
     }
-    if (existingProfile.exists) {
-      if (existingProfile.data()?.role !== 'owner') {
-        throw new HttpsError('already-exists', 'This Firebase account already has an admin profile.');
-      }
-      if (!existingSettings.exists) transaction.create(settingsRef, siteSettings);
-      transaction.create(ownerRef, {
-        uid,
-        role: 'owner',
-        createdAt: existingProfile.data()?.createdAt || new Date().toISOString(),
-      });
-      return;
-    }
-    const existingUsers = await transaction.get(db.collection('users').limit(1));
-    if (!existingUsers.empty) {
-      throw new HttpsError('already-exists', 'An admin profile already exists. Ask the existing Owner to provision your account.');
-    }
-    transaction.create(profileRef, {
+    transaction.create(usersCollection.doc(seededUser.uid), {
       email,
       role: 'owner',
-      createdAt: new Date().toISOString(),
+      status: 'approved',
+      mustChangePassword: true,
+      createdAt,
     });
-    transaction.create(ownerRef, {
-      uid,
-      role: 'owner',
-      createdAt: new Date().toISOString(),
-    });
-    if (!existingSettings.exists) transaction.create(settingsRef, siteSettings);
+    transaction.create(ownerRef, { uid: seededUser.uid, role: 'owner', createdAt });
+    if (!existingSettings.exists) transaction.create(settingsRef, DEFAULT_SITE_CONFIG);
   });
-  return { id: uid, email, role: 'owner' };
+  return { needsOwnerSetup: false };
+});
+
+export const initializeOwnerAccount = onCall(async () => {
+  throw new HttpsError('failed-precondition', 'Manual Owner creation is disabled. The default Owner is initialized by getOwnerSetupStatus.');
 });
 
 export const syncFacebookFeed = onCall(
@@ -278,7 +255,11 @@ export const sitemapXml = onRequest(async (request, response) => {
 const requireOwner = async (uid: string | undefined) => {
   if (!uid) throw new HttpsError('unauthenticated', 'Sign in to manage admin accounts.');
   const profile = await db.collection('users').doc(uid).get();
-  if (profile.data()?.role !== 'owner') throw new HttpsError('permission-denied', 'Only the Main Owner can manage admin accounts.');
+  const data = profile.data();
+  if (data?.role !== 'owner' || data?.mustChangePassword === true ||
+      data?.status === 'pending' || data?.status === 'rejected') {
+    throw new HttpsError('permission-denied', 'Only an Owner who has completed the required password change can manage admin accounts.');
+  }
 }
 
 export const createStoreManager = onCall(async (request) => {
@@ -297,10 +278,91 @@ export const createStoreManager = onCall(async (request) => {
   await db.collection('users').doc(user.uid).set({
     email,
     role: 'manager',
+    status: 'approved',
     createdAt: new Date().toISOString(),
     createdBy: request.auth?.uid,
   });
   return { id: user.uid, email, role: 'manager' };
+});
+
+export const registerStoreManager = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  const email = String(request.auth?.token.email || '').trim().toLowerCase();
+  if (!uid || !email) throw new HttpsError('unauthenticated', 'Create a Firebase account before requesting Store Manager access.');
+  const profileRef = db.collection('users').doc(uid);
+  const existing = await profileRef.get();
+  if (existing.exists) {
+    if (existing.data()?.role === 'manager' && existing.data()?.status === 'pending' &&
+        String(existing.data()?.email || '').toLowerCase() === email) {
+      return { success: true };
+    }
+    throw new HttpsError('already-exists', 'This account already has an admin profile.');
+  }
+  const user = await auth.getUser(uid);
+  if (!user.email || user.email.toLowerCase() !== email) {
+    throw new HttpsError('failed-precondition', 'The Firebase account email could not be verified.');
+  }
+  await profileRef.create({
+    email,
+    role: 'manager',
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  });
+  return { success: true };
+});
+
+export const approveStoreManager = onCall(async (request) => {
+  await requireOwner(request.auth?.uid);
+  const uid = String(request.data?.uid || '');
+  if (!uid) throw new HttpsError('invalid-argument', 'A manager user ID is required.');
+  const profileRef = db.collection('users').doc(uid);
+  const profile = await profileRef.get();
+  if (!profile.exists || profile.data()?.role !== 'manager' || profile.data()?.status !== 'pending') {
+    throw new HttpsError('not-found', 'Pending Store Manager request not found.');
+  }
+  const authUser = await auth.getUser(uid);
+  if (!authUser.emailVerified) {
+    throw new HttpsError('failed-precondition', 'The Store Manager must verify their email before approval.');
+  }
+  await profileRef.update({ status: 'approved', approvedAt: new Date().toISOString(), approvedBy: request.auth?.uid });
+  await auth.updateUser(uid, { disabled: false });
+  return { success: true };
+});
+
+export const rejectStoreManager = onCall(async (request) => {
+  await requireOwner(request.auth?.uid);
+  const uid = String(request.data?.uid || '');
+  if (!uid) throw new HttpsError('invalid-argument', 'A manager user ID is required.');
+  const profileRef = db.collection('users').doc(uid);
+  const profile = await profileRef.get();
+  if (!profile.exists || profile.data()?.role !== 'manager' || profile.data()?.status !== 'pending') {
+    throw new HttpsError('not-found', 'Pending Store Manager request not found.');
+  }
+  await profileRef.update({ status: 'rejected', rejectedAt: new Date().toISOString(), rejectedBy: request.auth?.uid });
+  await auth.updateUser(uid, { disabled: true });
+  return { success: true };
+});
+
+export const completeAdminPasswordChange = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in to complete the password change.');
+  const newPassword = String(request.data?.newPassword || '');
+  if (newPassword.length < 12) throw new HttpsError('invalid-argument', 'Use a password with at least 12 characters.');
+  const profileRef = db.collection('users').doc(uid);
+  const profile = await profileRef.get();
+  const data = profile.data();
+  if (!profile.exists || !['owner', 'manager'].includes(String(data?.role || '')) ||
+      data?.status === 'pending' || data?.status === 'rejected') {
+    throw new HttpsError('permission-denied', 'Only an active admin can change this password.');
+  }
+  if (data?.mustChangePassword === true && newPassword === 'Owner@010101') {
+    throw new HttpsError('failed-precondition', 'Choose a password other than the shared bootstrap password.');
+  }
+  await auth.updateUser(uid, { password: newPassword });
+  if (data?.mustChangePassword === true) {
+    await profileRef.update({ mustChangePassword: false, passwordChangedAt: new Date().toISOString() });
+  }
+  return { success: true };
 });
 
 export const removeStoreManager = onCall(async (request) => {

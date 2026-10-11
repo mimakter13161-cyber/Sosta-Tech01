@@ -7,6 +7,7 @@ import {
   getAuth,
   onAuthStateChanged,
   reauthenticateWithCredential,
+  sendEmailVerification,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
@@ -28,7 +29,6 @@ import {
 import { FirebaseStorage, getBlob, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { Functions, getFunctions, httpsCallable } from 'firebase/functions';
 import { AdminRole, AdminUser, FacebookFeed, HappyCustomer, Product, SiteSettings } from './types';
-import { DEFAULT_SITE_SETTINGS } from './data/mockData';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -271,7 +271,21 @@ export const signInAdmin = async (email: string, password: string) => {
     await signOut(firebaseAuth);
     throw new Error('This Firebase account does not have a valid admin role.');
   }
-  return { id: credential.user.uid, email: credential.user.email || email, role: data.role as AdminRole, passwordSalt: '', passwordHash: '' } satisfies AdminUser;
+  if (data.status === 'pending' || data.status === 'rejected') {
+    await signOut(firebaseAuth);
+    throw new Error(data.status === 'pending'
+      ? 'Your Store Manager request is awaiting Owner approval.'
+      : 'Your Store Manager request was rejected. Contact the Main Owner.');
+  }
+  return {
+    id: credential.user.uid,
+    email: credential.user.email || email,
+    role: data.role as AdminRole,
+    status: data.status === 'approved' ? 'approved' : undefined,
+    mustChangePassword: data.mustChangePassword === true,
+    passwordSalt: '',
+    passwordHash: '',
+  } satisfies AdminUser;
 };
 
 export const readOwnerSetupStatus = async () => {
@@ -282,30 +296,6 @@ export const readOwnerSetupStatus = async () => {
   return !ownerMarker.exists() && serverStatus;
 };
 
-export const createFirebaseOwner = async (email: string, password: string) => {
-  if (!firebaseAuth || !firebaseFunctions) throw new Error('Firebase Authentication or Functions are unavailable.');
-  await configureFirebaseAuth();
-  let user;
-  try {
-    ({ user } = await createUserWithEmailAndPassword(firebaseAuth, email, password));
-  } catch (error) {
-    if (!(error && typeof error === 'object' && 'code' in error && error.code === 'auth/email-already-in-use')) throw error;
-    ({ user } = await signInWithEmailAndPassword(firebaseAuth, email, password));
-  }
-
-  try {
-    const initializeOwner = httpsCallable<{ siteSettings: SiteSettings }, { id: string; email: string; role: AdminRole }>(firebaseFunctions, 'initializeOwnerAccount');
-    const profile = (await initializeOwner({ siteSettings: DEFAULT_SITE_SETTINGS })).data;
-    if (profile.id !== user.uid || profile.role !== 'owner') {
-      throw new Error('Firebase did not confirm the initial Owner profile.');
-    }
-    return { ...profile, passwordSalt: '', passwordHash: '' } satisfies AdminUser;
-  } catch (error) {
-    await signOut(firebaseAuth);
-    throw error;
-  }
-};
-
 export const signOutAdmin = async () => {
   if (firebaseAuth) await signOut(firebaseAuth);
 };
@@ -314,6 +304,45 @@ export const createFirebaseManager = async (email: string, password: string) => 
   if (!firebaseFunctions) return null;
   const createManager = httpsCallable<{ email: string; password: string }, { id: string; email: string; role: AdminRole }>(firebaseFunctions, 'createStoreManager');
   return (await createManager({ email, password })).data;
+};
+
+export const registerFirebaseManager = async (email: string, password: string) => {
+  if (!firebaseAuth || !firebaseFunctions) throw new Error('Firebase Authentication or Functions are unavailable.');
+  await configureFirebaseAuth();
+  const normalizedEmail = email.trim().toLowerCase();
+  try {
+    const credential = await createUserWithEmailAndPassword(firebaseAuth, normalizedEmail, password);
+    await sendEmailVerification(credential.user);
+  } catch (error) {
+    if (!(error && typeof error === 'object' && 'code' in error && error.code === 'auth/email-already-in-use')) throw error;
+    const credential = await signInWithEmailAndPassword(firebaseAuth, normalizedEmail, password);
+    if (!credential.user.emailVerified) await sendEmailVerification(credential.user);
+  }
+  try {
+    const registerManager = httpsCallable<undefined, { success: boolean }>(firebaseFunctions, 'registerStoreManager');
+    await registerManager();
+  } catch (error) {
+    try {
+      await signOut(firebaseAuth);
+    } catch (signOutError) {
+      const detail = signOutError instanceof Error ? signOutError.message : 'unknown sign-out error';
+      throw new Error(`Registration failed, and the temporary Firebase session could not be cleared: ${detail}`);
+    }
+    throw error;
+  }
+  await signOut(firebaseAuth);
+};
+
+export const approveFirebaseManager = async (uid: string) => {
+  if (!firebaseFunctions) throw new Error('Firebase Functions are unavailable.');
+  const approve = httpsCallable<{ uid: string }, { success: boolean }>(firebaseFunctions, 'approveStoreManager');
+  await approve({ uid });
+};
+
+export const rejectFirebaseManager = async (uid: string) => {
+  if (!firebaseFunctions) throw new Error('Firebase Functions are unavailable.');
+  const reject = httpsCallable<{ uid: string }, { success: boolean }>(firebaseFunctions, 'rejectStoreManager');
+  await reject({ uid });
 };
 
 export const removeFirebaseManager = async (uid: string) => {
@@ -333,12 +362,41 @@ export const changeFirebasePassword = async (currentPassword: string, newPasswor
   const credential = EmailAuthProvider.credential(firebaseAuth.currentUser.email, currentPassword);
   await reauthenticateWithCredential(firebaseAuth.currentUser, credential);
   await updatePassword(firebaseAuth.currentUser, newPassword);
+  if (!firebaseFunctions) throw new Error('Firebase Functions are unavailable.');
+  const completeChange = httpsCallable<{ newPassword: string }, { success: boolean }>(firebaseFunctions, 'completeAdminPasswordChange');
+  await completeChange({ newPassword });
 };
 
 export const readAdminProfiles = async () => {
   if (!firebaseDb) return null;
   const snapshot = await getDocs(collection(firebaseDb, 'users'));
-  return snapshot.docs.map((item) => ({ id: item.id, email: String(item.data().email || ''), role: item.data().role as AdminRole, passwordSalt: '', passwordHash: '' } satisfies AdminUser));
+  return snapshot.docs.map((item) => ({
+    id: item.id,
+    email: String(item.data().email || ''),
+    role: item.data().role as AdminRole,
+    status: item.data().status === 'pending' || item.data().status === 'rejected' ? item.data().status : 'approved',
+    mustChangePassword: item.data().mustChangePassword === true,
+    passwordSalt: '',
+    passwordHash: '',
+  } satisfies AdminUser));
+};
+
+export const subscribeToAdminProfiles = (
+  onProfiles: (profiles: AdminUser[]) => void,
+  onError: (error: Error) => void,
+) => {
+  if (!firebaseDb) return () => undefined;
+  return onSnapshot(collection(firebaseDb, 'users'), (snapshot) => {
+    onProfiles(snapshot.docs.map((item) => ({
+      id: item.id,
+      email: String(item.data().email || ''),
+      role: item.data().role as AdminRole,
+      status: item.data().status === 'pending' || item.data().status === 'rejected' ? item.data().status : 'approved',
+      mustChangePassword: item.data().mustChangePassword === true,
+      passwordSalt: '',
+      passwordHash: '',
+    } satisfies AdminUser)));
+  }, onError);
 };
 
 export const readAdminProfile = async (uid: string) => {
@@ -346,8 +404,16 @@ export const readAdminProfile = async (uid: string) => {
   const snapshot = await getDoc(doc(firebaseDb, 'users', uid));
   if (!snapshot.exists()) return null;
   const data = snapshot.data();
-  if (data.role !== 'owner' && data.role !== 'manager') return null;
-  return { id: snapshot.id, email: String(data.email || ''), role: data.role, passwordSalt: '', passwordHash: '' } as AdminUser;
+  if ((data.role !== 'owner' && data.role !== 'manager') || data.status === 'pending' || data.status === 'rejected') return null;
+  return {
+    id: snapshot.id,
+    email: String(data.email || ''),
+    role: data.role,
+    status: data.status === 'approved' ? 'approved' : undefined,
+    mustChangePassword: data.mustChangePassword === true,
+    passwordSalt: '',
+    passwordHash: '',
+  } as AdminUser;
 };
 
 export const subscribeToFirebaseAuth = (callback: (userId: string | null) => void) =>

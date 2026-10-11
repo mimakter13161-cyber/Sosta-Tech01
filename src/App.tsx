@@ -16,11 +16,13 @@ import { createAdminUser, verifyAdminPassword } from './auth/adminAuth';
 import { LiveEditorOverlay } from './components/LiveEditorOverlay';
 import {
   changeFirebasePassword,
+  approveFirebaseManager,
   configureFirebaseAuth,
-  createFirebaseOwner,
   createFirebaseManager,
   deleteHappyCustomer,
   isFirebaseConfigured,
+  registerFirebaseManager,
+  rejectFirebaseManager,
   persistHappyCustomers,
   persistProducts,
   persistSiteSettings,
@@ -31,6 +33,7 @@ import {
   readHappyCustomers,
   readProducts,
   readSiteSettings,
+  subscribeToAdminProfiles,
   removeFirebaseManager,
   resetFirebaseManagerPassword,
   readFacebookFeed,
@@ -219,6 +222,7 @@ export default function App() {
   const [activeAdminId, setActiveAdminId] = useState<string | null>(() =>
     isFirebaseConfigured ? null : window.sessionStorage.getItem('sosta-admin-session-v1')
   );
+  const isManagerRegistrationRef = useRef(false);
   const currentAdmin = adminUsers.find((user) => user.id === activeAdminId) || null;
   const [activeTab, setActiveTab] = useState<string>(
     () => tabForPath(window.location.pathname)
@@ -599,6 +603,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!isFirebaseConfigured || currentAdmin?.role !== 'owner' || currentAdmin.mustChangePassword) return;
+    return subscribeToAdminProfiles(setAdminUsers, (error) => {
+      console.error('Could not subscribe to Store Manager approvals.', error);
+      showToast('Live staff approvals could not be loaded. Refresh the page to retry.');
+    });
+  }, [currentAdmin?.id, currentAdmin?.role, currentAdmin?.mustChangePassword]);
+
+  useEffect(() => {
     if (!isFirebaseConfigured || !cloudDataReady) return;
     return subscribeToPublicStoreData({
       onProducts: (cloudProducts, fromCache) => {
@@ -744,6 +756,7 @@ export default function App() {
       }
       if (isDisposed) return;
       unsubscribe = subscribeToFirebaseAuth((uid) => {
+        if (isManagerRegistrationRef.current) return;
         if (!uid) {
           setActiveAdminId(null);
           return;
@@ -758,7 +771,9 @@ export default function App() {
           setActiveAdminId(profile.id);
           setAuthBackend('firebase');
           setOwnerSetupError('');
-          const profiles = profile.role === 'owner' ? await readAdminProfiles() : [profile];
+          const profiles = profile.role === 'owner' && !profile.mustChangePassword
+            ? await readAdminProfiles()
+            : [profile];
           if (!isDisposed && profiles) setAdminUsers(profiles);
         }).catch((error: unknown) => {
           if (!isDisposed) {
@@ -882,7 +897,9 @@ export default function App() {
       const user = await signInAdmin(email.trim().toLowerCase(), password);
       if (!user) throw new Error('Firebase Authentication is unavailable.');
       establishAdminSession(user, 'firebase');
-      const profiles = user.role === 'owner' ? await readAdminProfiles() : [user];
+      const profiles = user.role === 'owner' && !user.mustChangePassword
+        ? await readAdminProfiles()
+        : [user];
       if (profiles) setAdminUsers(profiles);
       return;
     }
@@ -894,16 +911,7 @@ export default function App() {
   };
 
   const handleSetupOwner = async (email: string, password: string) => {
-    if (isFirebaseConfigured) {
-      if (!needsOwnerSetup) throw new Error('An Owner account is already set up.');
-      if (password.length < 12) throw new Error('Use a password with at least 12 characters.');
-      const owner = await createFirebaseOwner(email.trim().toLowerCase(), password);
-      setAdminUsers([owner]);
-      setNeedsOwnerSetup(false);
-      setOwnerSetupError('');
-      establishAdminSession(owner, 'firebase');
-      return;
-    }
+    if (isFirebaseConfigured) throw new Error('Firebase Owner accounts are initialized securely by the server bootstrap.');
     if (adminUsers.some((user) => user.role === 'owner')) throw new Error('An owner account is already set up.');
     if (password.length < 12) throw new Error('Use a password with at least 12 characters.');
     const owner = await createAdminUser(email, password, 'owner');
@@ -925,6 +933,29 @@ export default function App() {
     const manager = await createAdminUser(normalizedEmail, password, 'manager');
     setAdminUsers((users) => [...users, manager]);
     setLocalFallbackUsers((users) => [...users, manager]);
+  };
+
+  const handleRegisterManager = async (email: string, password: string) => {
+    if (!isFirebaseConfigured) throw new Error('Store Manager registration requires Firebase Authentication.');
+    if (password.length < 12) throw new Error('Use a password with at least 12 characters.');
+    isManagerRegistrationRef.current = true;
+    try {
+      await registerFirebaseManager(email, password);
+    } finally {
+      isManagerRegistrationRef.current = false;
+    }
+  };
+
+  const handleApproveManager = async (userId: string) => {
+    if (currentAdmin?.role !== 'owner') throw new Error('Only the Main Owner can approve managers.');
+    if (authBackend === 'firebase') await approveFirebaseManager(userId);
+    setAdminUsers((users) => users.map((user) => user.id === userId ? { ...user, status: 'approved' } : user));
+  };
+
+  const handleRejectManager = async (userId: string) => {
+    if (currentAdmin?.role !== 'owner') throw new Error('Only the Main Owner can reject managers.');
+    if (authBackend === 'firebase') await rejectFirebaseManager(userId);
+    setAdminUsers((users) => users.map((user) => user.id === userId ? { ...user, status: 'rejected' } : user));
   };
 
   const handleRemoveManager = async (userId: string) => {
@@ -952,6 +983,15 @@ export default function App() {
   const handleChangePassword = async (currentPassword: string, newPassword: string) => {
     if (authBackend === 'firebase') {
       await changeFirebasePassword(currentPassword, newPassword);
+      if (currentAdmin) {
+        setAdminUsers((users) => users.map((user) => user.id === currentAdmin.id
+          ? { ...user, mustChangePassword: false }
+          : user));
+        if (currentAdmin.role === 'owner') {
+          const profiles = await readAdminProfiles();
+          if (profiles) setAdminUsers(profiles);
+        }
+      }
       return;
     }
     if (!currentAdmin || !(await verifyAdminPassword(currentAdmin, currentPassword))) {
@@ -1497,11 +1537,13 @@ export default function App() {
             activeAdminSection={activeAdminSection}
             onNavigateAdminSection={requestAdminSection}
             onAddManager={handleAddManager}
+            onApproveManager={handleApproveManager}
+            onRejectManager={handleRejectManager}
             onRemoveManager={handleRemoveManager}
             onResetManagerPassword={handleResetManagerPassword}
             onChangePassword={handleChangePassword}
             onLogout={handleAdminLogout}
-            requirePasswordChange={Boolean(currentAdmin.mustChangePassword) && authBackend === 'local'}
+            requirePasswordChange={Boolean(currentAdmin.mustChangePassword)}
             onDeleteProduct={handleDeleteProduct}
             onSelectProduct={handleSelectProduct}
             onBackToStorefront={() => {
@@ -1519,6 +1561,7 @@ export default function App() {
             ownerSetupError={ownerSetupError}
             onLogin={handleAdminLogin}
             onSetupOwner={handleSetupOwner}
+            onRegisterManager={handleRegisterManager}
           />
         ))}
         </Suspense>
