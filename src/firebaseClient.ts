@@ -148,14 +148,16 @@ export const readProducts = async () => {
 export const persistSiteSettings = async (settings: SiteSettings) => {
   if (!firebaseDb) return;
   const cloudSettings = await uploadSiteSettingsImages(settings);
-  await setDoc(doc(firebaseDb, 'siteSettings', 'public'), removeUndefined(cloudSettings));
+  await setDoc(doc(firebaseDb, 'settings', 'site_config'), removeUndefined(cloudSettings));
   return cloudSettings;
 };
 
 export const readSiteSettings = async () => {
   if (!firebaseDb) return null;
-  const snapshot = await getDocFromServer(doc(firebaseDb, 'siteSettings', 'public'));
-  return snapshot.exists() ? snapshot.data() as SiteSettings : null;
+  const siteConfig = await getDocFromServer(doc(firebaseDb, 'settings', 'site_config'));
+  if (siteConfig.exists()) return siteConfig.data() as SiteSettings;
+  const legacySettings = await getDocFromServer(doc(firebaseDb, 'siteSettings', 'public'));
+  return legacySettings.exists() ? legacySettings.data() as SiteSettings : null;
 };
 
 export const readFacebookFeed = async (): Promise<FacebookFeed> => {
@@ -217,8 +219,23 @@ export const subscribeToPublicStoreData = (handlers: {
   const unsubscribeProducts = onSnapshot(collection(firebaseDb, 'products'), options, (snapshot) => {
     handlers.onProducts(snapshot.docs.map((item) => ({ ...item.data(), id: item.id } as Product)), snapshot.metadata.fromCache);
   }, reportError);
+  let siteConfigSettings: SiteSettings | null = null;
+  let legacySettings: SiteSettings | null = null;
+  let siteConfigFromCache = true;
+  let legacySettingsFromCache = true;
+  const emitSettings = () => handlers.onSettings(
+    siteConfigSettings || legacySettings,
+    siteConfigSettings ? siteConfigFromCache : legacySettingsFromCache
+  );
   const unsubscribeSettings = onSnapshot(doc(firebaseDb, 'siteSettings', 'public'), options, (snapshot) => {
-    handlers.onSettings(snapshot.exists() ? snapshot.data() as SiteSettings : null, snapshot.metadata.fromCache);
+    legacySettings = snapshot.exists() ? snapshot.data() as SiteSettings : null;
+    legacySettingsFromCache = snapshot.metadata.fromCache;
+    emitSettings();
+  }, reportError);
+  const unsubscribeSiteConfig = onSnapshot(doc(firebaseDb, 'settings', 'site_config'), options, (snapshot) => {
+    siteConfigSettings = snapshot.exists() ? snapshot.data() as SiteSettings : null;
+    siteConfigFromCache = snapshot.metadata.fromCache;
+    emitSettings();
   }, reportError);
   const unsubscribeCustomers = onSnapshot(collection(firebaseDb, 'happyCustomers'), options, (snapshot) => {
     const deletedCustomerIds = snapshot.docs
@@ -235,6 +252,7 @@ export const subscribeToPublicStoreData = (handlers: {
   return () => {
     unsubscribeProducts();
     unsubscribeSettings();
+    unsubscribeSiteConfig();
     unsubscribeCustomers();
   };
 };
@@ -257,9 +275,11 @@ export const signInAdmin = async (email: string, password: string) => {
 };
 
 export const readOwnerSetupStatus = async () => {
-  if (!firebaseFunctions) throw new Error('Firebase Functions are unavailable.');
+  if (!firebaseDb || !firebaseFunctions) throw new Error('Firebase Firestore or Functions are unavailable.');
+  const ownerMarker = await getDocFromServer(doc(firebaseDb, 'settings', 'owner'));
   const getSetupStatus = httpsCallable<undefined, { needsOwnerSetup: boolean }>(firebaseFunctions, 'getOwnerSetupStatus');
-  return (await getSetupStatus()).data.needsOwnerSetup;
+  const serverStatus = (await getSetupStatus()).data.needsOwnerSetup;
+  return !ownerMarker.exists() && serverStatus;
 };
 
 export const createFirebaseOwner = async (email: string, password: string) => {

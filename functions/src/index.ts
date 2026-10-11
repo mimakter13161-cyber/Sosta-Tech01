@@ -53,11 +53,24 @@ export const getFacebookFeed = onCall(async () => readCachedFacebookFeed());
 
 export const getOwnerSetupStatus = onCall(async () => {
   const usersCollection = db.collection('users');
-  const [owners, users] = await Promise.all([
+  const ownerRef = db.collection('settings').doc('owner');
+  const [ownerMarker, owners, users] = await Promise.all([
+    ownerRef.get(),
     usersCollection.where('role', '==', 'owner').limit(1).get(),
     usersCollection.limit(1).get(),
   ]);
-  return { needsOwnerSetup: owners.empty && users.empty };
+  if (!ownerMarker.exists && !owners.empty) {
+    const legacyOwner = owners.docs[0];
+    await ownerRef.create({
+      uid: legacyOwner.id,
+      role: 'owner',
+      createdAt: legacyOwner.data().createdAt || new Date().toISOString(),
+    }).catch(async (error: unknown) => {
+      const refreshed = await ownerRef.get();
+      if (!refreshed.exists) throw error;
+    });
+  }
+  return { needsOwnerSetup: !ownerMarker.exists && owners.empty && users.empty };
 });
 
 export const initializeOwnerAccount = onCall(async (request) => {
@@ -67,7 +80,8 @@ export const initializeOwnerAccount = onCall(async (request) => {
     throw new HttpsError('unauthenticated', 'Create or sign in to a Firebase Authentication account to initialize the Owner.');
   }
   const profileRef = db.collection('users').doc(uid);
-  const settingsRef = db.collection('siteSettings').doc('public');
+  const ownerRef = db.collection('settings').doc('owner');
+  const settingsRef = db.collection('settings').doc('site_config');
   const submittedSettings = request.data?.siteSettings;
   if (!submittedSettings || typeof submittedSettings !== 'object' || Array.isArray(submittedSettings)) {
     throw new HttpsError('invalid-argument', 'Valid initial shop settings are required.');
@@ -101,13 +115,29 @@ export const initializeOwnerAccount = onCall(async (request) => {
   }
   siteSettings.heroBanners = heroBanners.slice(0, 10);
   await db.runTransaction(async (transaction) => {
+    const existingOwner = await transaction.get(ownerRef);
     const existingProfile = await transaction.get(profileRef);
     const existingSettings = await transaction.get(settingsRef);
+    if (existingOwner.exists) {
+      if (existingOwner.data()?.uid !== uid) {
+        throw new HttpsError('already-exists', 'The Main Owner account is already initialized.');
+      }
+      if (!existingProfile.exists || existingProfile.data()?.role !== 'owner') {
+        throw new HttpsError('failed-precondition', 'The saved Owner profile is missing or invalid. Contact Firebase support.');
+      }
+      if (!existingSettings.exists) transaction.create(settingsRef, siteSettings);
+      return;
+    }
     if (existingProfile.exists) {
       if (existingProfile.data()?.role !== 'owner') {
         throw new HttpsError('already-exists', 'This Firebase account already has an admin profile.');
       }
       if (!existingSettings.exists) transaction.create(settingsRef, siteSettings);
+      transaction.create(ownerRef, {
+        uid,
+        role: 'owner',
+        createdAt: existingProfile.data()?.createdAt || new Date().toISOString(),
+      });
       return;
     }
     const existingUsers = await transaction.get(db.collection('users').limit(1));
@@ -116,6 +146,11 @@ export const initializeOwnerAccount = onCall(async (request) => {
     }
     transaction.create(profileRef, {
       email,
+      role: 'owner',
+      createdAt: new Date().toISOString(),
+    });
+    transaction.create(ownerRef, {
+      uid,
       role: 'owner',
       createdAt: new Date().toISOString(),
     });

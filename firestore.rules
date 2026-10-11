@@ -29,6 +29,16 @@ service cloud.firestore {
       allow write: if isOwner();
     }
 
+    match /settings/owner {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /settings/site_config {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+
     match /happyCustomers/{customerId} {
       allow read: if true;
       allow write: if isOwner();

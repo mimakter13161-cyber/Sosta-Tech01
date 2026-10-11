@@ -368,6 +368,11 @@ export default function App() {
       const canPublishProducts = isFirebaseConfigured && cloudDataReady && Boolean(currentAdmin) && authBackend === 'firebase';
       const canPublishOwnerContent = canPublishProducts && currentAdmin?.role === 'owner';
 
+      if (isLiveEditDirty && isFirebaseConfigured && !canPublishOwnerContent) {
+        showToast('Live Editor changes require a verified Firebase Owner and an available Firestore connection. Changes were not saved.');
+        return;
+      }
+
       window.localStorage.setItem('sosta-products-v1', JSON.stringify(products));
       window.localStorage.setItem('sosta-happy-customers-v1', JSON.stringify(happyCustomers));
       writeSiteSettingsStorage(settingsToSave);
@@ -396,6 +401,9 @@ export default function App() {
           ]);
           if (JSON.stringify(products) !== JSON.stringify(savedProducts) && !cloudProducts) {
             throw new Error('The shared Firebase product store is unavailable.');
+          }
+          if (canPublishOwnerContent && settingsChanged && !cloudSettings) {
+            throw new Error('The shared Firebase site configuration was not confirmed as saved.');
           }
           const persistedSettings = cloudSettings
             ? normalizeSiteSettings({ ...DEFAULT_SITE_SETTINGS, ...cloudSettings, liveContent: cloudSettings.liveContent ?? draftLiveEdits })
