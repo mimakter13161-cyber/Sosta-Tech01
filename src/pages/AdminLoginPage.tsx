@@ -14,8 +14,9 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 }) => {
   const settings = useSiteSettings();
   const demoMode = import.meta.env.DEV && !firebaseMode;
-  const [email, setEmail] = useState('admin@sostatech.bd');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [error, setError] = useState('');
@@ -82,9 +83,32 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
           <label className="text-[13px] font-semibold text-[#0b1c30]">Username / Email
             <input autoComplete="username" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full h-11 px-3 rounded-lg bg-[#eff4ff] border border-[#d4d9e5] font-normal focus:outline-none focus:ring-2 focus:ring-[#004ac6]/30" />
           </label>
-          <label className="text-[13px] font-semibold text-[#0b1c30]">Password
-            <input autoComplete={mode === 'register' ? 'new-password' : 'current-password'} type="password" required minLength={mode === 'register' ? 12 : undefined} value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 w-full h-11 px-3 rounded-lg bg-[#eff4ff] border border-[#d4d9e5] font-normal focus:outline-none focus:ring-2 focus:ring-[#004ac6]/30" />
-          </label>
+          <div>
+            <label htmlFor="admin-password" className="text-[13px] font-semibold text-[#0b1c30]">Password</label>
+            <div className="relative mt-1">
+              <input
+                id="admin-password"
+                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                type={isPasswordVisible ? 'text' : 'password'}
+                required
+                minLength={mode === 'register' ? 12 : undefined}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full h-11 px-3 pr-12 rounded-lg bg-[#eff4ff] border border-[#d4d9e5] font-normal focus:outline-none focus:ring-2 focus:ring-[#004ac6]/30"
+              />
+              <button
+                type="button"
+                onClick={() => setIsPasswordVisible((visible) => !visible)}
+                aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+                aria-pressed={isPasswordVisible}
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#565e74] hover:text-[#004ac6]"
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  {isPasswordVisible ? 'visibility_off' : 'visibility'}
+                </span>
+              </button>
+            </div>
+          </div>
           {mode === 'register' && (
             <label className="text-[13px] font-semibold text-[#0b1c30]">Confirm Password
               <input autoComplete="new-password" type="password" required minLength={12} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1 w-full h-11 px-3 rounded-lg bg-[#eff4ff] border border-[#d4d9e5] font-normal focus:outline-none focus:ring-2 focus:ring-[#004ac6]/30" />
@@ -101,7 +125,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 
         <p className="mt-6 border-t border-[#e2e8f0] pt-4 text-[11px] leading-relaxed text-[#565e74]">
           {firebaseMode
-            ? 'Sign-in is verified by Firebase Authentication and your admin role is read from Firestore. The Owner email is prefilled; an Owner account must already be provisioned in Firebase.'
+            ? 'Sign-in is verified by Firebase Authentication and your admin role is read from Firestore. An Owner account must already be provisioned in Firebase.'
             : 'This client-only demo stores account records in this browser. Configure Firebase Authentication before exposing admin access to the public internet.'}
         </p>
       </section>
