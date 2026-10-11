@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { FacebookFeed, HappyCustomer, Product, Review } from '../types';
 import { STORE_MAP_IMAGE } from '../data/mockData';
 import { useSiteSettings } from '../components/SiteSettingsContext';
+import { getProductCategories, getProductCategory } from '../data/productCategories';
 
 interface HomePageProps {
   products: Product[];
@@ -29,6 +30,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   const settings = useSiteSettings();
   const [activeHeroBanner, setActiveHeroBanner] = useState(0);
   const [visibleHomeProductCount, setVisibleHomeProductCount] = useState(10);
+  const [activeHomeCategory, setActiveHomeCategory] = useState('All Products');
   const heroSlides = useMemo(() => {
     const iphone = products.find((product) => product.id === 'iphone-16-pro-max')
       || products.find((product) => product.brand === 'Apple' && /16 Pro/i.test(product.model));
@@ -81,7 +83,23 @@ export const HomePage: React.FC<HomePageProps> = ({
     const selectedProductIds = new Set(selectedProducts.map((product) => product.id));
     return [...selectedProducts, ...products.filter((product) => !selectedProductIds.has(product.id))];
   }, [products]);
-  const visibleHomeProducts = homeProducts.slice(0, visibleHomeProductCount);
+  const homeCategoryTabs = [
+    'All Products',
+    'iPhone',
+    'Android',
+    'Samsung',
+    'Android Flagships',
+    'Accessories',
+    ...getProductCategories(products).filter((category) =>
+      !['iPhone', 'Android', 'Samsung', 'Android Flagships', 'Accessories'].includes(category)
+    ),
+  ];
+  const filteredHomeProducts = homeProducts.filter((product) => {
+    if (activeHomeCategory === 'All Products') return true;
+    if (activeHomeCategory === 'Samsung' || activeHomeCategory === 'Android Flagships') return product.brand === 'Samsung';
+    return getProductCategory(product) === activeHomeCategory;
+  });
+  const visibleHomeProducts = filteredHomeProducts.slice(0, visibleHomeProductCount);
   const latestHappyCustomers = [...happyCustomers]
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, 6);
@@ -409,7 +427,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </span>
               </div>
               <h2 className="text-[32px] font-bold text-[#0b1c30] mt-1 tracking-tight">
-                Featured Flagship Inventory
+                {activeHomeCategory === 'All Products' ? 'Featured Flagship Inventory' : activeHomeCategory}
               </h2>
             </div>
             <div className="flex items-center gap-2 text-[#434655] text-[13px]">
@@ -417,6 +435,34 @@ export const HomePage: React.FC<HomePageProps> = ({
               <span>Physical units verified on Rajshahi showroom shelves</span>
             </div>
           </div>
+
+          <nav aria-label="Filter home products by category" className="flex flex-wrap gap-2">
+            {homeCategoryTabs.map((category) => (
+              <button
+                key={category}
+                type="button"
+                aria-pressed={activeHomeCategory === category}
+                onClick={() => {
+                  setActiveHomeCategory(category);
+                  setVisibleHomeProductCount(10);
+                }}
+                className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-colors ${
+                  activeHomeCategory === category
+                    ? 'bg-[#004ac6] text-white'
+                    : 'border border-[#e2e8f0] bg-white text-[#434655] hover:bg-[#e5eeff] hover:text-[#004ac6]'
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => onNavigateCatalog()}
+              className="ml-auto rounded-full border border-[#004ac6] px-4 py-2 text-[13px] font-semibold text-[#004ac6] transition-colors hover:bg-[#eff4ff]"
+            >
+              Browse All Products
+            </button>
+          </nav>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {visibleHomeProducts.map((phone) => (
@@ -533,11 +579,16 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             ))}
           </div>
-          {homeProducts.length > visibleHomeProducts.length && (
+          {filteredHomeProducts.length === 0 && (
+            <p className="rounded-xl border border-[#e2e8f0] bg-[#f8f9ff] p-8 text-center text-[14px] text-[#565e74]">
+              No products are currently listed in this category.
+            </p>
+          )}
+          {filteredHomeProducts.length > visibleHomeProducts.length && (
             <div className="flex justify-center">
               <button
                 type="button"
-                onClick={() => setVisibleHomeProductCount((count) => Math.min(count + 8, homeProducts.length))}
+                onClick={() => setVisibleHomeProductCount((count) => Math.min(count + 8, filteredHomeProducts.length))}
                 className="rounded-xl bg-[#004ac6] px-6 py-3 text-[14px] font-semibold text-white transition-colors hover:bg-[#2563eb]"
               >
                 Load More Products

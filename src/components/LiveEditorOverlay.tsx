@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ImageUploadField } from './ImageUploadField';
 import { LiveEditMap, LiveEditValue, ProductImage } from '../types';
 
@@ -18,6 +18,7 @@ interface LiveEditorOverlayProps {
   onToggle: () => void;
   onChange: (edits: LiveEditMap) => void;
   onSave: () => void;
+  onDiscard: () => void;
   onNavigate: (tab: string, path: string) => void;
 }
 
@@ -49,18 +50,39 @@ export const LiveEditorOverlay: React.FC<LiveEditorOverlayProps> = ({
   onToggle,
   onChange,
   onSave,
+  onDiscard,
   onNavigate,
 }) => {
   const [selected, setSelected] = useState<LiveEditValue | null>(null);
+  const originalValues = useRef(new Map<string, string>());
 
   useEffect(() => {
     setSelected(null);
+  }, [routeKey]);
+
+  useEffect(() => {
+    const activeEditKeys = new Set<string>();
     for (const edit of Object.values(edits)) {
       if (edit.route !== routeKey) continue;
       const element = document.querySelector(edit.selector);
       if (!element) continue;
+      const key = editKey(edit.route, edit.selector);
+      activeEditKeys.add(key);
+      if (!originalValues.current.has(key)) {
+        originalValues.current.set(key, edit.kind === 'image' && element instanceof HTMLImageElement
+          ? element.getAttribute('src') || ''
+          : element.textContent?.trim() || '');
+      }
       if (edit.kind === 'image' && element instanceof HTMLImageElement) element.src = edit.value;
       else if (edit.kind === 'text') element.textContent = edit.value;
+    }
+    for (const [key, originalValue] of originalValues.current) {
+      if (activeEditKeys.has(key) || !key.startsWith(`${routeKey}|`)) continue;
+      const selector = key.slice(routeKey.length + 1);
+      const element = document.querySelector(selector);
+      if (element instanceof HTMLImageElement) element.src = originalValue;
+      else if (element) element.textContent = originalValue;
+      originalValues.current.delete(key);
     }
   }, [routeKey, edits]);
 
@@ -90,13 +112,19 @@ export const LiveEditorOverlay: React.FC<LiveEditorOverlayProps> = ({
   const updateSelected = (kind: LiveEditValue['kind'], value: string) => {
     if (!selected) return;
     const next = { ...selected, kind, value };
+    const key = editKey(routeKey, selected.selector);
     const element = document.querySelector(selected.selector);
     if (element) {
+      if (!originalValues.current.has(key)) {
+        originalValues.current.set(key, kind === 'image' && element instanceof HTMLImageElement
+          ? element.getAttribute('src') || ''
+          : element.textContent?.trim() || '');
+      }
       if (kind === 'image' && element instanceof HTMLImageElement) element.src = value;
       else if (kind === 'text') element.textContent = value;
     }
     setSelected(next);
-    onChange({ ...edits, [editKey(routeKey, selected.selector)]: next });
+    onChange({ ...edits, [key]: next });
   };
 
   const selectedImages: ProductImage[] = selected?.kind === 'image' && selected.value
@@ -148,7 +176,8 @@ export const LiveEditorOverlay: React.FC<LiveEditorOverlayProps> = ({
             <p className="mt-4 rounded-lg bg-[#f8f9ff] p-3 text-[12px] text-[#565e74]">Click a heading, paragraph, button label, or image on the page to edit its content.</p>
           )}
 
-          <div className="mt-4 flex justify-end border-t border-[#e2e8f0] pt-3">
+          <div className="mt-4 flex justify-between border-t border-[#e2e8f0] pt-3">
+            <button disabled={!isDirty || isSaving} onClick={onDiscard} className="rounded-lg border border-[#d4d9e5] px-4 py-2 text-[12px] font-semibold text-[#0b1c30] disabled:cursor-not-allowed disabled:opacity-50">Discard</button>
             <button disabled={!isDirty || isSaving} onClick={onSave} className="rounded-lg bg-[#004ac6] px-4 py-2 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{isSaving ? 'Saving…' : 'Save Changes'}</button>
           </div>
         </aside>

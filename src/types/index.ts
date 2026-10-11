@@ -147,6 +147,7 @@ export interface Product {
   model: string;
   brand: string;
   series: string;
+  category?: string;
   title: string;
   description: string;
   imageUrl?: string;

@@ -3,6 +3,7 @@ import { AdminUser, FacebookFeed, HappyCustomer, Product, ProductImage, ProductV
 import { useSiteSettings } from '../components/SiteSettingsContext';
 import { ImageUploadField } from '../components/ImageUploadField';
 import { downloadImageAsDataUrl, isFirebaseConfigured } from '../firebaseClient';
+import { getProductCategories, getProductCategory } from '../data/productCategories';
 
 interface ProductTaxonomy {
   brands: string[];
@@ -268,6 +269,8 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
   const [editModel, setEditModel] = useState('');
   const [editBrand, setEditBrand] = useState('');
   const [editSeries, setEditSeries] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editCategoryCustom, setEditCategoryCustom] = useState(false);
   const [editDescription, setEditDescription] = useState('');
   const [editWeightSpecifications, setEditWeightSpecifications] = useState('');
   const [editCondition, setEditCondition] = useState<Product['condition']>('Brand New');
@@ -293,6 +296,8 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
   const [newShowOnHomePage, setNewShowOnHomePage] = useState(false);
   const [newBrand, setNewBrand] = useState<string>('Apple');
   const [newSeries, setNewSeries] = useState<string>('iPhone 16 Series');
+  const [newCategory, setNewCategory] = useState('iPhone');
+  const [newCategoryCustom, setNewCategoryCustom] = useState(false);
   const [newCondition, setNewCondition] = useState<Product['condition']>('Brand New');
   const [newModelIdentifier, setNewModelIdentifier] = useState('');
   const [newSku, setNewSku] = useState('');
@@ -323,6 +328,8 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
   ])).sort((left, right) => left.localeCompare(right));
   const availableSeriesKey = availableSeries.join('\u0000');
   const availableModels = Array.from(new Set(products.map((product) => product.model))).sort((left, right) => left.localeCompare(right));
+  const availableCategories = Array.from(new Set(['iPhone', 'Android', ...getProductCategories(products)]))
+    .sort((left, right) => left.localeCompare(right));
   const previousBrand = React.useRef(canonicalBrand);
 
   useEffect(() => {
@@ -595,6 +602,8 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
     setEditModel(p.model);
     setEditBrand(p.brand);
     setEditSeries(p.series);
+    setEditCategory(getProductCategory(p));
+    setEditCategoryCustom(!availableCategories.includes(getProductCategory(p)));
     setEditDescription(p.detailedDescription || p.description);
     setEditWeightSpecifications(p.weightSpecifications || '');
     setEditCondition(p.condition);
@@ -647,6 +656,7 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
         model: editModel,
         brand: editBrand,
         series: editSeries,
+        category: editCategory.trim(),
         description: editDescription,
         detailedDescription: editDescription,
         weightSpecifications: editWeightSpecifications,
@@ -707,7 +717,7 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
 
   const handleCreateNewProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newModel.trim() || !newBrand.trim() || !newSeries.trim()) return;
+    if (!newModel.trim() || !newBrand.trim() || !newSeries.trim() || !newCategory.trim()) return;
 
     const brand = canonicalBrand;
     const series = newSeries.trim();
@@ -738,6 +748,7 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
       model: newModel,
       brand,
       series,
+      category: newCategory.trim(),
       title: `${brand} ${newModel}`,
       description: detailedDescription || 'Newly added verified flagship unit in Rajshahi. Complete warranty coverage.',
       imageUrl,
@@ -782,6 +793,8 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
     setIsAddModalOpen(false);
     onToast(`Added ${newModel} to Rajshahi inventory vault!`);
     setNewModel('');
+    setNewCategory(brand === 'Apple' ? 'iPhone' : brand === 'Samsung' ? 'Android' : series);
+    setNewCategoryCustom(false);
     setNewShowOnHomePage(false);
     setNewModelIdentifier('');
     setNewSku('');
@@ -1736,6 +1749,30 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
                 <label className="text-[12px] font-semibold text-[#0b1c30]">Series
                   <input value={editSeries} onChange={(event) => setEditSeries(event.target.value)} className="mt-1 w-full h-10 px-3 rounded-lg bg-[#eff4ff] border border-[#e2e8f0] font-normal" />
                 </label>
+                <label className="text-[12px] font-semibold text-[#0b1c30]">Category
+                  <select
+                    value={editCategoryCustom ? '__custom__' : editCategory}
+                    onChange={(event) => {
+                      const category = event.target.value;
+                      setEditCategoryCustom(category === '__custom__');
+                      if (category !== '__custom__') setEditCategory(category);
+                      else setEditCategory('');
+                    }}
+                    className="mt-1 w-full h-10 px-3 rounded-lg bg-[#eff4ff] border border-[#e2e8f0] font-normal"
+                  >
+                    {availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                    <option value="__custom__">Add a new category…</option>
+                  </select>
+                  {editCategoryCustom && (
+                    <input
+                      autoFocus
+                      value={editCategory}
+                      onChange={(event) => setEditCategory(event.target.value)}
+                      placeholder="Enter a new category"
+                      className="mt-2 w-full h-10 px-3 rounded-lg bg-[#eff4ff] border border-[#e2e8f0] font-normal"
+                    />
+                  )}
+                </label>
                 <label className="text-[12px] font-semibold text-[#0b1c30]">Condition
                   <select value={editCondition} onChange={(event) => {
                     const condition = event.target.value as Product['condition'];
@@ -2037,8 +2074,17 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
                   createLabel="Add New Brand"
                   placeholder="Search or enter a brand"
                   required
-                  onChange={setNewBrand}
-                  onCreate={(brand) => { setNewBrand(brand); rememberBrandAndSeries(brand); }}
+                  onChange={(brand) => {
+                    setNewBrand(brand);
+                    setNewCategory(brand === 'Apple' ? 'iPhone' : brand === 'Samsung' ? 'Android' : '');
+                    setNewCategoryCustom(false);
+                  }}
+                  onCreate={(brand) => {
+                    setNewBrand(brand);
+                    setNewCategory(brand === 'Apple' ? 'iPhone' : brand === 'Samsung' ? 'Android' : '');
+                    setNewCategoryCustom(false);
+                    rememberBrandAndSeries(brand);
+                  }}
                 />
                 <SuggestionInput
                   label="Series"
@@ -2051,6 +2097,34 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
                   onCreate={(series) => { setNewSeries(series); if (canonicalBrand) rememberBrandAndSeries(canonicalBrand, series); }}
                 />
               </div>
+
+              <label className="block font-semibold text-[#0b1c30]">
+                Category
+                <select
+                  value={newCategoryCustom ? '__custom__' : newCategory}
+                  required={!newCategoryCustom}
+                  onChange={(event) => {
+                    const category = event.target.value;
+                    setNewCategoryCustom(category === '__custom__');
+                    if (category !== '__custom__') setNewCategory(category);
+                    else setNewCategory('');
+                  }}
+                  className="mt-1 w-full h-10 px-3 rounded-lg bg-[#eff4ff] border border-[#e2e8f0] font-normal"
+                >
+                  {availableCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                  <option value="__custom__">Add a new category…</option>
+                </select>
+                {newCategoryCustom && (
+                  <input
+                    autoFocus
+                    required
+                    value={newCategory}
+                    onChange={(event) => setNewCategory(event.target.value)}
+                    placeholder="e.g. Accessories or Smartwatches"
+                    className="mt-2 w-full h-10 px-3 rounded-lg bg-[#eff4ff] border border-[#e2e8f0] font-normal"
+                  />
+                )}
+              </label>
 
               <div>
                 <SuggestionInput

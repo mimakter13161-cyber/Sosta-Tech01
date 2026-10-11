@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Product } from '../types';
 import { useSiteSettings } from '../components/SiteSettingsContext';
+import { getProductCategories, getProductCategory } from '../data/productCategories';
 
 interface CatalogPageProps {
   products: Product[];
@@ -45,6 +46,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
   const facetProducts = products;
   const availableSeries = Array.from(new Set(facetProducts.map((product) => product.series).filter(Boolean)))
     .sort((left, right) => left.localeCompare(right));
+  const availableCategories = getProductCategories(facetProducts);
   const availableBrands = Array.from(new Set(facetProducts.map((product) => product.brand).filter(Boolean)))
     .sort((left, right) => left.localeCompare(right));
   const availableConditions = Array.from(new Set(facetProducts.map((product) => product.condition)))
@@ -90,11 +92,11 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
     );
   };
 
-  const selectCatalogView = (view: 'all' | 'iPhones' | 'Android' | 'Accessories') => {
-    setSelectedBrand(view === 'iPhones' ? 'Apple' : view === 'Android' ? 'Samsung' : 'all');
-    setSelectedCategory(view === 'Accessories' ? 'Accessories' : 'all');
+  const selectCatalogView = (view: string) => {
+    setSelectedBrand(view === 'iPhone' ? 'Apple' : ['Samsung', 'Android Flagships'].includes(view) ? 'Samsung' : 'all');
+    setSelectedCategory(['all', 'iPhone', 'Samsung', 'Android Flagships'].includes(view) ? 'all' : view);
     setSelectedSeries([]);
-    onCategoryChange?.(view === 'Accessories' ? 'Accessories' : '');
+    onCategoryChange?.(['all', 'iPhone', 'Samsung', 'Android Flagships'].includes(view) ? '' : view);
   };
 
   const handleResetFilters = () => {
@@ -118,9 +120,9 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
-      if (selectedCategory === 'Accessories' && !/\b(accessor(?:y|ies)|charger|case|cable|airpods|buds|watch)\b/i.test(`${p.title} ${p.model} ${p.series}`)) return false;
       if (selectedCategory === 'Pre-Owned' && !p.condition.includes('Pre-Owned')) return false;
-      if (selectedCategory !== 'all' && selectedCategory !== 'Pre-Owned' && selectedCategory !== 'Accessories' && p.series !== selectedCategory) return false;
+      if (selectedCategory !== 'all' && selectedCategory !== 'Pre-Owned' &&
+        p.series !== selectedCategory && getProductCategory(p) !== selectedCategory) return false;
 
       const price = Number.isFinite(p.basePrice) ? p.basePrice : 0;
       if (price < minPrice || price > maxPrice) return false;
@@ -188,9 +190,9 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                 chevron_right
               </span>
               <span className="hover:text-[#004ac6] cursor-pointer">
-                {brandFilter === 'Samsung'
+                {selectedBrand === 'Samsung'
                   ? 'Android Flagships'
-                  : brandFilter === 'Apple'
+                  : selectedBrand === 'Apple'
                     ? 'iPhones'
                     : 'All Products'}
               </span>
@@ -200,9 +202,9 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
               <span className="text-[#0b1c30] font-semibold">All Models</span>
             </nav>
             <h1 className="text-[32px] sm:text-[36px] font-bold text-[#0b1c30] tracking-tight">
-              {brandFilter === 'Samsung'
+              {selectedBrand === 'Samsung'
                 ? 'Authentic Android Flagships'
-                : brandFilter === 'Apple'
+                : selectedBrand === 'Apple'
                   ? 'Authentic iPhone Flagships'
                   : 'All Products'}
             </h1>
@@ -239,19 +241,18 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
       {/* Main Catalog View Grid */}
       <div className="max-w-[1440px] mx-auto px-6 lg:px-12 py-10 w-full">
         <nav aria-label="Product categories" className="mb-8 flex flex-wrap items-center justify-center gap-2">
-          {([
-            ['all', 'All Products'],
-            ['iPhones', 'iPhones'],
-            ['Android', 'Android'],
-            ['Accessories', 'Accessories'],
-          ] as const).map(([view, label]) => {
+          {(['all', 'iPhone', 'Android', 'Samsung', 'Android Flagships', 'Accessories',
+            ...availableCategories.filter((category) =>
+              !['iPhone', 'Android', 'Samsung', 'Android Flagships', 'Accessories'].includes(category)
+            )]).map((view) => {
             const isActive = view === 'all'
               ? selectedBrand === 'all' && selectedCategory === 'all'
-              : view === 'iPhones'
+              : view === 'iPhone'
                 ? selectedBrand === 'Apple' && selectedCategory === 'all'
-                : view === 'Android'
+                : view === 'Samsung' || view === 'Android Flagships'
                   ? selectedBrand === 'Samsung' && selectedCategory === 'all'
-                  : selectedCategory === 'Accessories';
+                  : selectedCategory === view;
+            const label = view === 'all' ? 'All Products' : view;
             return (
               <button
                 key={view}
@@ -426,6 +427,9 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                 >
                   <option value="all">All categories</option>
                   {availableSeries.map((series) => <option key={series} value={series}>{series}</option>)}
+                  {availableCategories.filter((category) => !availableSeries.includes(category)).map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
                   {availableConditions.some((condition) => condition.includes('Pre-Owned')) && (
                     <option value="Pre-Owned">Pre-Owned</option>
                   )}

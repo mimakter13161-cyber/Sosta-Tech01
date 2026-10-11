@@ -28,6 +28,7 @@ import {
 import { FirebaseStorage, getBlob, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { Functions, getFunctions, httpsCallable } from 'firebase/functions';
 import { AdminRole, AdminUser, FacebookFeed, HappyCustomer, Product, SiteSettings } from './types';
+import { DEFAULT_SITE_SETTINGS } from './data/mockData';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -273,8 +274,8 @@ export const createFirebaseOwner = async (email: string, password: string) => {
   }
 
   try {
-    const initializeOwner = httpsCallable<undefined, { id: string; email: string; role: AdminRole }>(firebaseFunctions, 'initializeOwnerAccount');
-    const profile = (await initializeOwner()).data;
+    const initializeOwner = httpsCallable<{ siteSettings: SiteSettings }, { id: string; email: string; role: AdminRole }>(firebaseFunctions, 'initializeOwnerAccount');
+    const profile = (await initializeOwner({ siteSettings: DEFAULT_SITE_SETTINGS })).data;
     if (profile.id !== user.uid || profile.role !== 'owner') {
       throw new Error('Firebase did not confirm the initial Owner profile.');
     }

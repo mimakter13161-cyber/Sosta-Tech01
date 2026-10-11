@@ -52,8 +52,12 @@ const requireStoreAdmin = async (uid: string | undefined) => {
 export const getFacebookFeed = onCall(async () => readCachedFacebookFeed());
 
 export const getOwnerSetupStatus = onCall(async () => {
-  const users = await db.collection('users').limit(1).get();
-  return { needsOwnerSetup: users.empty };
+  const usersCollection = db.collection('users');
+  const [owners, users] = await Promise.all([
+    usersCollection.where('role', '==', 'owner').limit(1).get(),
+    usersCollection.limit(1).get(),
+  ]);
+  return { needsOwnerSetup: owners.empty && users.empty };
 });
 
 export const initializeOwnerAccount = onCall(async (request) => {
@@ -63,11 +67,48 @@ export const initializeOwnerAccount = onCall(async (request) => {
     throw new HttpsError('unauthenticated', 'Create or sign in to a Firebase Authentication account to initialize the Owner.');
   }
   const profileRef = db.collection('users').doc(uid);
+  const settingsRef = db.collection('siteSettings').doc('public');
+  const submittedSettings = request.data?.siteSettings;
+  if (!submittedSettings || typeof submittedSettings !== 'object' || Array.isArray(submittedSettings)) {
+    throw new HttpsError('invalid-argument', 'Valid initial shop settings are required.');
+  }
+  const settingKeys = [
+    'brandName',
+    'contactNumber',
+    'whatsAppNumber',
+    'tagline',
+    'heroTitle',
+    'heroSubtitle',
+    'heroDescription',
+    'logoUrl',
+    'facebookPageUrl',
+    'footerDescription',
+    'footerTrustText',
+    'footerCopyright',
+    'footerLocation',
+    'storeHours',
+  ] as const;
+  const siteSettings: Record<string, unknown> = Object.fromEntries(settingKeys.map((key) => {
+    const value = (submittedSettings as Record<string, unknown>)[key];
+    if (typeof value !== 'string') {
+      throw new HttpsError('invalid-argument', `Initial shop setting "${key}" is invalid.`);
+    }
+    return [key, value];
+  }));
+  const heroBanners = (submittedSettings as Record<string, unknown>).heroBanners;
+  if (!Array.isArray(heroBanners) || heroBanners.some((banner) => typeof banner !== 'string')) {
+    throw new HttpsError('invalid-argument', 'Initial hero banners are invalid.');
+  }
+  siteSettings.heroBanners = heroBanners.slice(0, 10);
   await db.runTransaction(async (transaction) => {
     const existingProfile = await transaction.get(profileRef);
+    const existingSettings = await transaction.get(settingsRef);
     if (existingProfile.exists) {
-      if (existingProfile.data()?.role === 'owner') return;
-      throw new HttpsError('already-exists', 'This Firebase account already has an admin profile.');
+      if (existingProfile.data()?.role !== 'owner') {
+        throw new HttpsError('already-exists', 'This Firebase account already has an admin profile.');
+      }
+      if (!existingSettings.exists) transaction.create(settingsRef, siteSettings);
+      return;
     }
     const existingUsers = await transaction.get(db.collection('users').limit(1));
     if (!existingUsers.empty) {
@@ -78,6 +119,7 @@ export const initializeOwnerAccount = onCall(async (request) => {
       role: 'owner',
       createdAt: new Date().toISOString(),
     });
+    if (!existingSettings.exists) transaction.create(settingsRef, siteSettings);
   });
   return { id: uid, email, role: 'owner' };
 });

@@ -1566,11 +1566,25 @@ export default function App() {
           onToggle={toggleLiveEditor}
           onChange={setDraftLiveEdits}
           onSave={saveChanges}
+          onDiscard={discardChanges}
           onNavigate={(tab, path) => requestNavigation({ tab, path, productId: tab === 'pdp' ? selectedProductId : undefined })}
         />
       )}
 
-      {isDirty && (
+      {liveEditorEnabled && isLiveEditDirty && (
+        <div data-live-editor-ui="true" className="fixed top-24 left-1/2 z-[90] flex w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 items-center justify-between gap-3 rounded-xl border border-[#c3c6d7] bg-white px-4 py-3 shadow-2xl">
+          <div>
+            <p className="text-[13px] font-bold text-[#0b1c30]">Unsaved live site edits</p>
+            <p className="text-[11px] text-[#565e74]">Save to publish these changes for all visitors.</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button disabled={isSavingLiveEdits} onClick={discardChanges} className="rounded-lg border border-[#d4d9e5] px-3 py-2 text-[12px] font-semibold text-[#0b1c30] disabled:opacity-50">Discard</button>
+            <button disabled={isSavingLiveEdits} onClick={saveChanges} className="rounded-lg bg-[#004ac6] px-4 py-2 text-[12px] font-semibold text-white disabled:cursor-wait disabled:opacity-60">{isSavingLiveEdits ? 'Saving…' : 'Save Changes'}</button>
+          </div>
+        </div>
+      )}
+
+      {isDirty && !(liveEditorEnabled && isLiveEditDirty) && (
         <div data-live-editor-ui="true" className="fixed bottom-4 left-1/2 z-[90] flex w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 items-center justify-between gap-3 rounded-xl border border-[#c3c6d7] bg-white px-4 py-3 shadow-2xl">
           <div>
             <p className="text-[13px] font-bold text-[#0b1c30]">Unsaved changes</p>
